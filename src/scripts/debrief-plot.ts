@@ -353,7 +353,7 @@ export function createPlot(container: HTMLElement, specs: BodySpec[], opts: Plot
 		scene.add(s);
 	}
 
-	// ---------- Radar disc: sweep wedge and bearing ticks on the orbital plane ----------
+	// ---------- Radar disc: a sweep wedge on the orbital plane ----------
 	const OUTER = Math.max(...specs.map((s) => s.orbit));
 	// The overview pulls back until the second orbit from the outside fits; the outermost runs past the frame edges
 	const sorted = [...new Set(specs.map((s) => s.orbit))].sort((a, z) => a - z);
@@ -376,12 +376,7 @@ export function createPlot(container: HTMLElement, specs: BodySpec[], opts: Plot
 					float inside = (1.0 - smoothstep(uR - 0.4, uR, r)) * smoothstep(1.2, 2.2, r);
 					float wedge = exp(-d * 2.4) * inside;
 					float edge = (1.0 - smoothstep(0.0, 0.02, d)) * inside;
-					float seg = fract(a / 6.28318 * 72.0);
-					float major = fract(a / 6.28318 * 12.0);
-					float band = step(uR + 0.2, r) * step(r, uR + 0.5);
-					float tick = max(step(seg, 0.05) * band, step(major, 0.01) * step(uR + 0.2, r) * step(r, uR + 0.95));
-					float ring = 1.0 - smoothstep(0.0, 0.035, abs(r - (uR + 0.2)));
-					vec3 col = uAmber * (wedge * 0.07 + edge * 0.1) + uIce * (tick * 0.22 + ring * 0.14);
+					vec3 col = uAmber * (wedge * 0.07 + edge * 0.1);
 					gl_FragColor = vec4(col * uFade, 1.0);
 				}
 			`,
@@ -580,6 +575,8 @@ ${PLANET_FRAGMENT}`,
 	const VESSEL_SPEED = (Math.PI * 2) / 300; // radians a second
 	let vAngle = 0, vScale = 1, ringGoal = 0, shipLight = 0;
 	let vSection = -1; // in the vessel's close-up, the section the camera holds, or -1 for the whole ship
+	const RING_SPIN = 0.16; // radians a second, about one turn in forty seconds
+	let ringSpin = RING_SPIN;
 	let shadowSpan = 0;
 	if (vo) {
 		const ci = Math.cos(vo.inclination), si = Math.sin(vo.inclination);
@@ -914,9 +911,15 @@ ${PLANET_FRAGMENT}`,
 			const goal = closeId && closeId !== 'vessel' ? 0.3 : 1;
 			vScale += (goal - vScale) * (k === 1 ? 1 : 1 - Math.exp(-dt * 2.5));
 			placeVessel();
-			// The ring spins for gravity; in its close-up it eases round to where its bays read top to bottom
-			if (closeId === 'vessel') vessel.ring.rotation.z += (ringGoal - vessel.ring.rotation.z) * (k === 1 ? 1 : 1 - Math.exp(-dt * 2));
-			else vessel.ring.rotation.z += dt * 0.09;
+			// The ring spins for gravity, in the whole ship's close-up too; only while the camera holds one of its bays
+			// does it ease round to face that bay to the camera and wait, and it spins back up when the camera leaves
+			if (closeId === 'vessel' && vSection >= 1) {
+				vessel.ring.rotation.z += (ringGoal - vessel.ring.rotation.z) * (k === 1 ? 1 : 1 - Math.exp(-dt * 2));
+				ringSpin = 0;
+			} else {
+				ringSpin += (RING_SPIN - ringSpin) * (k === 1 ? 1 : 1 - Math.exp(-dt * 1.2));
+				vessel.ring.rotation.z += dt * ringSpin;
+			}
 			vessel.update(t, dt, shipLight);
 		}
 
@@ -949,7 +952,7 @@ ${PLANET_FRAGMENT}`,
 			shipSun.shadow.autoUpdate = shipLight > 0.01;
 			// The shadow map covers only what the camera holds, so a single section gets crisp shadows
 			const held = closeId === 'vessel' && vSection >= 0 ? vessel.sections[vSection] : null;
-			const span = held ? held.reach * 2.6 : 0.62;
+			const span = held ? held.reach * 2.6 : vessel.reach * 1.05;
 			if (Math.abs(span - shadowSpan) > 1e-4) {
 				shadowSpan = span;
 				Object.assign(shipSun.shadow.camera, { left: -span, right: span, top: span, bottom: -span });
@@ -1053,9 +1056,8 @@ ${PLANET_FRAGMENT}`,
 		return { key, x: ((tmp.x + 1) / 2) * W, y: ((1 - tmp.y) / 2) * H, r: (size / (dist * tanHalf())) * (H / 2) };
 	}
 
-	const labelPoints = [
-		{ key: 'belt', p: new THREE.Vector3(0, 0, BELT[1] + 0.35) },
-	];
+	// Points in the scene with a text mark on the page, matched by key to a .yr element (none at present)
+	const labelPoints: { key: string; p: THREE.Vector3 }[] = [];
 	const pinAt = new THREE.Vector3(), toCam = new THREE.Vector3(), nrmAt = new THREE.Vector3();
 	function report() {
 		const host = bodies.find((b) => b.id === closeId);

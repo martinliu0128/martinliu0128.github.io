@@ -6,9 +6,13 @@ import Portrait from '../components/Portrait.astro';
 import fieldPhoto from '../assets/portraits/field-photo.jpg';
 import { commandModule } from '../data/command-module';
 import { court } from '../data/court';
+import { piano } from '../data/piano';
+import { arcade } from '../data/arcade';
+import arcadeAtlas from '../assets/arcade/posters.jpg';
 
 const cabinPhotos = import.meta.glob<ImageMetadata>('../assets/cabin/*.jpg', { eager: true, import: 'default' });
 const courtPhotos = import.meta.glob<ImageMetadata>('../assets/court/*.jpg', { eager: true, import: 'default' });
+const pianoPhotos = import.meta.glob<ImageMetadata>('../assets/piano/*.jpg', { eager: true, import: 'default' });
 // Design D: Mission debrief. An unfamiliar star with four worlds, one per kind of experience: academic, professional,
 // engagement, and research. Picking a world flies the camera in; its sites are pinned to the surface, and picking
 // a site opens its debrief. A crewed vessel orbits out of the planets' plane: its command module holds my profile,
@@ -139,7 +143,7 @@ const vessel = {
 	bays: [
 		{ name: 'Basketball', room: 'The Court', stencil: 'COURT', feature: 'court' },
 		{ name: 'Astronomy', room: 'The Observatory', stencil: 'OBSERVATORY', feature: 'observatory' },
-		{ name: 'Piano', room: 'The Music Room', stencil: 'MUSIC ROOM', feature: 'music' },
+		{ name: 'Piano', room: 'The Concert Hall', stencil: 'CONCERT HALL', feature: 'music' },
 		{ name: 'Travel', room: 'The Map Room', stencil: 'MAP ROOM', feature: 'map' },
 		{ name: 'Video Games', room: 'The Arcade', stencil: 'ARCADE', feature: 'arcade' },
 	].map((b) => ({
@@ -174,6 +178,16 @@ const courtData = {
 	})),
 	banners: court.banners,
 };
+// The piano bay's wall displays (text in src/data/piano.ts), its foyer poster, and the recording on its stage screen
+const pianoSrc = (file: string) => pianoPhotos[`../assets/piano/${file}.jpg`].src;
+const hallData = {
+	name: profile.name,
+	panels: piano.panels.map((p) => ({ ...p, photos: p.photos.map((ph) => ({ src: pianoSrc(ph.file), caption: ph.caption })) })),
+	photo: pianoSrc('piano'),
+	film: { ...piano.film, poster: pianoSrc(piano.film.poster), src: `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}media/piano.mp4` },
+};
+// The video games bay: the games by series (src/data/arcade.ts) and the atlas their posters are packed in
+const arcadeData = { name: profile.name, series: arcade.series, atlas: { src: arcadeAtlas.src, ...arcade.atlas } };
 const siteCount = worlds.reduce((n, w) => n + w.sites.length, 0);
 
 // Close-up views, one per hash: the vessel and each world (their sections or sites listed beside their pins),
@@ -199,6 +213,8 @@ const views = [
 		// The command module only says whose profile it holds; the profile itself is inside
 		...(si === 0 && { name: profile.name, kind: `Personal profile, in the command module of ${vessel.name}`, points: [], link: null, enter: 'cabin', enterLabel: 'Enter the command module' }),
 		...(si === 1 && { kind: `${s.kind}. Aboard ${vessel.name}`, points: [], link: null, enter: 'court', enterLabel: 'Enter the court' }),
+		...(si === 3 && { kind: `${s.kind}. Aboard ${vessel.name}`, points: [], link: null, enter: 'hall', enterLabel: 'Enter the concert hall' }),
+		...(si === 5 && { kind: `${s.kind}. Aboard ${vessel.name}`, points: [], link: null, enter: 'arcade', enterLabel: 'Enter the arcade' }),
 	})),
 	...worlds.flatMap((w) => [
 		{
@@ -323,9 +339,7 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 							<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5V1h4M11 1h4v4M15 11v4h-4M5 15H1v-4" /></svg>
 							Full view
 						</button>
-						<div class="marks" aria-hidden="true">
-							<span class="yr belt" data-key="belt">Asteroid belt</span>
-						</div>
+						<div class="marks" aria-hidden="true"></div>
 						<div class="hud tl" aria-hidden="true">
 							<p class="hud-title">Tactical plot</p>
 							<p>One world per résumé section</p>
@@ -487,13 +501,18 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 		<section class="cabin" hidden aria-label="Inside the vessel">
 			<div class="cabin-view"></div>
 			<span class="cabin-reticle" aria-hidden="true"></span>
+			<span class="cabin-aim" aria-hidden="true"><span class="keys">Click to enlarge</span><span class="touch">Tap to enlarge</span></span>
+			<div class="cabin-inspect" hidden>
+				<canvas aria-label="The display, enlarged"></canvas>
+				<p class="cabin-inspect-hint"><span class="keys"><kbd>Esc</kbd> or click to return</span><span class="touch">Tap to return</span></p>
+			</div>
 			<header class="cabin-bar">
 				<p><b>VSL-01</b> Command module, aboard ML-1</p>
 				<button class="cabin-leave" type="button">Back to the ship <kbd>Esc</kbd></button>
 			</header>
-			<button class="cabin-prompt" type="button"><span class="keys">Press <kbd>F</kbd> to open the hatch</span><span class="touch">Tap to open the hatch</span></button>
+			<button class="cabin-prompt" type="button"><span class="keys">Press <kbd>F</kbd> to <em>open the hatch</em></span><span class="touch">Tap to <em>open the hatch</em></span></button>
 			<button class="cabin-capture" type="button">Click to look around<span>Move the mouse to look, <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to walk, <kbd>Esc</kbd> to free the mouse</span></button>
-			<p class="cabin-help"><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to walk</span><span class="touch">Use the pad to walk</span><span class="keys">, the mouse to look, <kbd>Esc</kbd> to free the mouse</span><span class="touch">, drag to look around</span>. Press <kbd>F</kbd> at the hatch to return to the ship.</p>
+			<p class="cabin-help"><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to walk</span><span class="touch">Use the pad to walk</span><span class="keys">, the mouse to look, <kbd>Esc</kbd> to free the mouse</span><span class="touch">, drag to look around</span>. <span class="keys">Click</span><span class="touch">Tap</span> a display to read it up close; press <kbd>F</kbd> at the hatch to return to the ship.</p>
 			<div class="cabin-pad" aria-hidden="true">
 				<button type="button" data-key="f" style="grid-area: f">▲</button>
 				<button type="button" data-key="l" style="grid-area: l">◀</button>
@@ -506,12 +525,16 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 		<script type="application/json" id="view-data" set:html={JSON.stringify({ views, names: viewName })} />
 		<script type="application/json" id="cabin-data" set:html={JSON.stringify(cabinData)} />
 		<script type="application/json" id="court-data" set:html={JSON.stringify(courtData)} />
+		<script type="application/json" id="hall-data" set:html={JSON.stringify(hallData)} />
+		<script type="application/json" id="arcade-data" set:html={JSON.stringify(arcadeData)} />
 
 		<script>
 			import { createPlot, type BodySpec, type CloseFrame, type PlotOptions } from '../scripts/debrief-plot';
 			import { createInteriors, type Interiors } from '../scripts/interior';
 			import { commandModule, type CabinContent } from '../scripts/cabin';
 			import { courtBay, type CourtContent } from '../scripts/court';
+			import { concertHall, type HallContent } from '../scripts/hall';
+			import { arcadeBay, type ArcadeContent } from '../scripts/arcade';
 
 			const { bodies, vessel }: { bodies: BodySpec[]; vessel: PlotOptions['vessel'] } = JSON.parse(document.getElementById('body-data')!.textContent!);
 			const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -904,7 +927,7 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 
 			// ---------- Inside the vessel: walkable interiors, each its own first-person scene, built the first time it opens ----------
 			// Each hash names an interior and the section of the ship it is inside
-			const INTERIORS: Record<string, string> = { cabin: 'VSL-01', court: 'VSL-02' };
+			const INTERIORS: Record<string, string> = { cabin: 'VSL-01', court: 'VSL-02', hall: 'VSL-04', arcade: 'VSL-06' };
 			const cabinHost = document.querySelector<HTMLElement>('.cabin')!;
 			let interiors: Interiors | null = null;
 			const leaveInterior = () => goCloseup(views.get(INTERIORS[interiors?.current || 'cabin'])!.back, true);
@@ -913,6 +936,8 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 				interiors ??= createInteriors(cabinHost, {
 					cabin: commandModule(data('cabin-data') as CabinContent),
 					court: courtBay(data('court-data') as CourtContent),
+					hall: concertHall(data('hall-data') as HallContent),
+					arcade: arcadeBay(data('arcade-data') as ArcadeContent),
 				}, { reduced, textures: `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}textures/`, onExit: leaveInterior });
 				closeConsole();
 				openCloseup(INTERIORS[id]); // the ship waits outside, held on that section
@@ -949,8 +974,9 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 			addEventListener('keydown', (e) => {
 				if (e.key !== 'Escape') return;
 				if (interiors?.isOpen) {
-					// The first Escape only frees the mouse; the next one leaves
-					if (performance.now() - interiors.lockReleasedAt > 300) leaveInterior();
+					// An open display closes back to the cabin; otherwise the first Escape only frees the mouse, the next leaves
+					if (interiors.inspecting) interiors.closeInspect();
+					else if (performance.now() - interiors.lockReleasedAt > 300) leaveInterior();
 				} else if (cuView) goBack();
 				else if (!root.classList.contains('immersive')) goFullView();
 			});
@@ -1019,7 +1045,6 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 				color: rgba(228, 236, 247, 0.55);
 				will-change: transform;
 			}
-			.yr.belt { font-weight: 500; margin-left: -3.2em; color: rgba(228, 236, 247, 0.4); }
 			/* Hit area hugs the rendered planet: --r is its projected radius in px */
 			.target {
 				--pad: 8px;
@@ -1376,7 +1401,22 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 			.cabin.locked .cabin-capture, .cabin.leaving .cabin-capture, .cabin.no-lock .cabin-capture { display: none; }
 			.cabin.no-lock .cabin-view { cursor: grab; }
 			.cabin-view canvas { display: block; width: 100%; height: 100%; }
-			.cabin-reticle { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 50%; pointer-events: none; }
+			.cabin-reticle { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 50%; pointer-events: none; transition: width 0.15s, height 0.15s, margin 0.15s, border-color 0.15s; }
+			/* Over a display the reticle opens into a ring, with a word on what a click does */
+			.cabin.aiming .cabin-reticle { width: 22px; height: 22px; margin: -11px; border: 2px solid var(--amber); }
+			.cabin-aim { position: absolute; left: 50%; top: 50%; margin: 20px 0 0 18px; padding: 3px 8px; font: 600 0.75rem/1.2 var(--data); letter-spacing: 0.08em; text-transform: uppercase; color: var(--amber); background: rgba(8, 12, 22, 0.6); opacity: 0; transition: opacity 0.15s; pointer-events: none; }
+			.cabin-aim .touch { display: none; }
+			.cabin.aiming.locked .cabin-aim, .cabin.aiming.no-lock .cabin-aim { opacity: 1; }
+			/* A display opened across the view: nearly the whole window, the cabin dimmed behind it */
+			.cabin-inspect { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; align-content: center; gap: 14px; padding: 24px; background: rgba(3, 5, 10, 0.86); opacity: 0; transition: opacity 0.25s ease; cursor: pointer; }
+			.cabin-inspect[hidden] { display: none; }
+			.cabin.inspecting .cabin-inspect { opacity: 1; }
+			.cabin-inspect canvas { width: min(96vw, calc((100vh - 90px) * var(--a, 1.6))); height: auto; aspect-ratio: var(--a, 1.6); border: 1px solid rgba(111, 214, 255, 0.45); box-shadow: 0 0 60px rgba(111, 214, 255, 0.12); scale: 0.96; transition: scale 0.25s ease; }
+			.cabin.inspecting .cabin-inspect canvas { scale: 1; }
+			.cabin-inspect-hint { font: 500 0.85rem/1.2 var(--data); letter-spacing: 0.06em; color: var(--dim); }
+			.cabin-inspect-hint kbd { padding: 1px 6px; margin-right: 4px; font: 600 0.75rem/1.2 var(--data); color: var(--ice); border: 1px solid rgba(228, 236, 247, 0.3); }
+			.cabin-inspect-hint .touch { display: none; }
+			.cabin.inspecting .cabin-capture, .cabin.inspecting .cabin-prompt, .cabin.inspecting .cabin-reticle, .cabin.inspecting .cabin-aim, .cabin.inspecting .cabin-help, .cabin.inspecting .cabin-pad { visibility: hidden; }
 			.cabin-bar { position: absolute; inset: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 28px 40px; background: linear-gradient(rgba(3, 5, 10, 0.7), transparent); pointer-events: none; }
 			.cabin-bar > * { pointer-events: auto; }
 			.cabin-bar p { font: 600 0.85rem/1.2 var(--data); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ice); }
@@ -1391,6 +1431,7 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 			.cabin-prompt.on { opacity: 1; pointer-events: auto; cursor: pointer; }
 			.cabin-prompt kbd { padding: 1px 6px; margin: 0 3px; font: 600 0.8rem/1.2 var(--data); color: #fff; border: 1px solid rgba(95, 210, 138, 0.8); }
 			.cabin-prompt .touch { display: none; }
+			.cabin-prompt em { font-style: normal; }
 			.cabin-pad { position: absolute; left: 24px; bottom: 72px; display: none; grid-template: 'x f y' 54px 'l b r' 54px / 54px 54px 54px; gap: 6px; }
 			.cabin-pad button { font-size: 1.1rem; color: var(--ice); background: rgba(8, 12, 22, 0.55); border: 1px solid rgba(228, 236, 247, 0.3); touch-action: none; }
 			@media (hover: none) and (pointer: coarse) {
@@ -1400,6 +1441,8 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 				.cabin-prompt .touch { display: inline; }
 				.cabin-help .keys { display: none; }
 				.cabin-help .touch { display: inline; }
+				.cabin-aim .keys, .cabin-inspect-hint .keys { display: none; }
+				.cabin-aim .touch, .cabin-inspect-hint .touch { display: inline; }
 				.cabin-help { bottom: 16px; font-size: 0.8rem; }
 				.cabin-prompt { white-space: normal; text-align: center; width: max-content; max-width: calc(100% - 32px); }
 				.cabin-bar { padding: 14px 16px 32px; }

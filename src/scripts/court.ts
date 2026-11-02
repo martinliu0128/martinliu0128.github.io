@@ -65,7 +65,7 @@ function arenaSheet() {
 // The floor: maple planks along the court, the court's lines and paint, and the surrounds in navy.
 // Canvas x follows world x; canvas y runs from the entrance (top) to the far end.
 function courtSheet() {
-	const L = Z1 - Z0, W = 4096, H = Math.round((W * L) / (2 * HW));
+	const L = Z1 - Z0, W = 2048, H = Math.round((W * L) / (2 * HW)); // about 120 px a metre, and a sheet the card can hold
 	const { cv, g } = canvas(W, H);
 	const sx = W / (2 * HW), sz = H / L;
 	const X = (x: number) => (x + HW) * sx, Z = (z: number) => (z - Z0) * sz;

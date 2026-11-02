@@ -27,6 +27,11 @@ export const FONT = '"Barlow", "Barlow Condensed", Arial, sans-serif';
 export const COND = '"Barlow Condensed", "Barlow", "Arial Narrow", Arial, sans-serif';
 export const DISPLAY = 'Michroma, "Barlow Condensed", Arial, sans-serif';
 
+// Resolves once the faces the displays are lettered in have loaded, so text drawn earlier can be drawn again
+export const fontsReady: Promise<unknown> = typeof document === 'undefined' || !document.fonts
+	? Promise.resolve()
+	: Promise.all(['400 40px Barlow', '600 40px "Barlow Condensed"', '400 40px Michroma'].map((f) => document.fonts.load(f))).catch(() => {});
+
 export function rng(seed: number) {
 	return () => {
 		seed = (seed + 0x6d2b79f5) | 0;
@@ -63,6 +68,18 @@ export function wrap(g: CanvasRenderingContext2D, text: string, x: number, y: nu
 	}
 	if (line) { if (!dry) g.fillText(line, x, y); y += lineH; }
 	return y;
+}
+
+// The lines a text breaks into at `maxW`
+export function lines(g: CanvasRenderingContext2D, text: string, maxW: number) {
+	const out: string[] = [];
+	let line = '';
+	for (const word of text.split(' ')) {
+		const test = line ? `${line} ${word}` : word;
+		if (g.measureText(test).width > maxW && line) { out.push(line); line = word; } else line = test;
+	}
+	if (line) out.push(line);
+	return out;
 }
 
 // The largest body size at which the paragraphs fit in `maxH`
@@ -183,7 +200,7 @@ export function storyScreen(p: Panel, index: number, total: number, photosLeft: 
 		const n = p.photos.length, capH = 58, gap = 34;
 		const aspect = imgs.map((im) => (im ? im.width / im.height : 4 / 3));
 		const avail = bottom - top;
-		const colW = Math.min(1000, ...aspect.map((a) => ((avail - (n - 1) * gap - n * capH) / n) * a));
+		const colW = n ? Math.min(1000, ...aspect.map((a) => ((avail - (n - 1) * gap - n * capH) / n) * a)) : 0;
 		const px = photosLeft ? pad : W - pad - colW;
 		const stack = aspect.reduce((sum, a) => sum + colW / a + capH, 0) + (n - 1) * gap;
 		let py = top + Math.max(0, (avail - stack) / 2);
@@ -215,7 +232,7 @@ export function storyScreen(p: Panel, index: number, total: number, photosLeft: 
 		});
 
 		// The record: its section, its title, then the text
-		const tx = photosLeft ? px + colW + 100 : pad, tw = W - pad * 2 - colW - 100;
+		const tx = n && photosLeft ? px + colW + 100 : pad, tw = W - pad * 2 - (n ? colW + 100 : 0);
 		let y = top + 36;
 		g.font = `600 34px ${COND}`;
 		g.fillStyle = AMBER;
@@ -228,12 +245,14 @@ export function storyScreen(p: Panel, index: number, total: number, photosLeft: 
 		g.fillRect(tx, y - 36, 140, 5);
 		y += 44;
 		const chipsH = p.chips.length ? 100 : 0;
-		const fit = fitText(g, p.paragraphs, tw, bottom - chipsH - y);
-		p.paragraphs.forEach((para, i) => {
-			g.font = `400 ${fit.size}px ${FONT}`;
-			g.fillStyle = i === 0 ? '#eef3fa' : '#c3cfdf';
-			y = wrap(g, para, tx, y, tw, fit.lh) + fit.gap;
-		});
+		if (n) {
+			const fit = fitText(g, p.paragraphs, tw, bottom - chipsH - y);
+			p.paragraphs.forEach((para, i) => {
+				g.font = `400 ${fit.size}px ${FONT}`;
+				g.fillStyle = i === 0 ? '#eef3fa' : '#c3cfdf';
+				y = wrap(g, para, tx, y, tw, fit.lh) + fit.gap;
+			});
+		} else columns(g, p.paragraphs, tx, y, tw, bottom - chipsH - y - 20);
 		let cx = tx;
 		g.font = `600 32px ${COND}`;
 		for (const chip of p.chips) {
@@ -257,7 +276,38 @@ export function storyScreen(p: Panel, index: number, total: number, photosLeft: 
 		im.src = ph.src;
 	});
 	draw();
+	void fontsReady.then(() => { draw(); onChange(); });
 	return t;
+}
+
+// Text alone across a whole display, flowed down two columns at the largest size that fits
+function columns(g: CanvasRenderingContext2D, paragraphs: string[], x: number, y: number, w: number, maxH: number) {
+	const gutter = 110, cw = (w - gutter) / 2;
+	let size = 60, layout: { text: string; col: number; y: number; para: number }[] = [];
+	for (; size >= 30; size -= 2) {
+		g.font = `400 ${size}px ${FONT}`;
+		const lh = Math.round(size * 1.45), gap = Math.round(size * 0.62);
+		layout = [];
+		let col = 0, cy = 0;
+		paragraphs.forEach((para, i) => {
+			if (cy > 0) cy += gap;
+			for (const text of lines(g, para, cw)) {
+				if (cy + lh > maxH) { col++; cy = 0; }
+				layout.push({ text, col, y: cy, para: i });
+				cy += lh;
+			}
+		});
+		if (col < 2) break;
+	}
+	g.font = `400 ${size}px ${FONT}`;
+	const first = Math.round(size * 1.0);
+	for (const l of layout) {
+		g.fillStyle = l.para === 0 ? '#eef3fa' : '#c3cfdf';
+		g.fillText(l.text, x + l.col * (cw + gutter), y + first + l.y);
+	}
+	// A hairline between the columns
+	g.fillStyle = 'rgba(111,214,255,0.18)';
+	g.fillRect(x + cw + gutter / 2, y + 10, 2, maxH - 10);
 }
 
 export type Live = { tex: THREE.CanvasTexture; draw(time: number): void };
@@ -296,6 +346,39 @@ export function shell(r0: number, r1: number, z0: number, z1: number, seg = 128)
 	return g;
 }
 
+// Many flat quads in one geometry, each placed by a matrix (the quad lies in its local XY plane, facing +Z) with its
+// own part of a shared texture: one draw call however many there are
+export class Quads {
+	private p: number[] = [];
+	private n: number[] = [];
+	private uv: number[] = [];
+	private idx: number[] = [];
+	add(m: THREE.Matrix4, w: number, h: number, [u0, v0, u1, v1]: number[]) {
+		const base = this.p.length / 3;
+		const nm = new THREE.Vector3(0, 0, 1).transformDirection(m);
+		for (const [x, y, u, v] of [[-w / 2, -h / 2, u0, v0], [w / 2, -h / 2, u1, v0], [w / 2, h / 2, u1, v1], [-w / 2, h / 2, u0, v1]]) {
+			const q = new THREE.Vector3(x, y, 0).applyMatrix4(m);
+			this.p.push(q.x, q.y, q.z);
+			this.n.push(nm.x, nm.y, nm.z);
+			this.uv.push(u, v);
+		}
+		this.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+	}
+	mesh(material: THREE.Material) {
+		const g = new THREE.BufferGeometry();
+		g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+		g.setAttribute('normal', new THREE.Float32BufferAttribute(this.n, 3));
+		g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
+		g.setIndex(this.idx);
+		return new THREE.Mesh(g, material);
+	}
+}
+
+// A placement: position, then a turn about Y and a tilt about X
+const UNIT = new THREE.Vector3(1, 1, 1);
+export const M = (x: number, y: number, z: number, ry = 0, rx = 0) =>
+	new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, 0, 'YXZ')), UNIT);
+
 // Display glass: the picture with fine scanlines and a slow rolling band; until it boots, a dim standby
 // that a bright line wipes away from the top
 const SCREEN_VERT = /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
@@ -327,6 +410,7 @@ function mergeStatic(scene: THREE.Scene) {
 		const m = o.material as THREE.Material;
 		if (m instanceof THREE.ShaderMaterial || m.transparent) return;
 		for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p.userData.keep) return;
+		if (!['position', 'normal', 'uv'].every((name) => name in o.geometry.attributes)) return; // merged meshes must match
 		let g = o.geometry.clone().applyMatrix4(o.matrixWorld);
 		if (g.index) g = g.toNonIndexed();
 		for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
@@ -403,14 +487,21 @@ export type Interior = {
 	code: string;
 	name: string;
 	scale: number;
-	eye: number;
+	eye: number; // eye height above the floor, or above y = 0 where the interior gives no `ground`
+	ground?(p: THREE.Vector3): number; // the floor's height under p, for an interior on more than one level
 	spawn: THREE.Vector3;
 	spawnYaw: number;
 	collide(p: THREE.Vector3, radius: number): void;
 	hatch: { z: number; y: number; door: THREE.Group; wheel: THREE.Group }; // on a bulkhead facing +Z, centred on x = 0
 	revealAt: number; // metres
 	exposure: number;
+	actions?: Action[]; // other things F does, besides opening the hatch
+	update?(dt: number, time: number): void; // each frame while inside
+	leave?(): void; // when the pilot leaves or the view closes
 };
+
+// Something F does near a spot on the floor (x, z) while facing `look`; `label` finishes "Press F to …"
+export type Action = { x: number; z: number; reach: number; look: THREE.Vector3; label(): string; run(): void };
 
 export type Interiors = {
 	open(id: string): void;
@@ -418,6 +509,8 @@ export type Interiors = {
 	readonly isOpen: boolean;
 	readonly current: string;
 	readonly lockReleasedAt: number; // when the mouse was last freed, so the Escape that freed it can be ignored
+	readonly inspecting: boolean; // a display is open across the view
+	closeInspect(): void;
 };
 
 // Pushes a walker of `radius` out of each box (x0..x1 by z0..z1)
@@ -432,14 +525,17 @@ export function pushOut(p: THREE.Vector3, boxes: { x0: number; x1: number; z0: n
 	}
 }
 
-type Screen = { mat: THREE.ShaderMaterial; mesh: THREE.Mesh; at: THREE.Vector3; reveal: number; on: boolean; booted: boolean };
+type Screen = { mat: THREE.ShaderMaterial; mesh: THREE.Mesh; at: THREE.Vector3; reveal: number; on: boolean; booted: boolean; src: HTMLCanvasElement | null };
 type Slot = { live: Live; obj: THREE.Object3D; at: THREE.Vector3; every: number; range: number; radius: number; next: number };
-type Loaded = { id: string; scene: THREE.Scene; it: Interior; screens: Screen[]; slots: Slot[] };
+type Loaded = { id: string; scene: THREE.Scene; it: Interior; screens: Screen[]; slots: Slot[]; meshes: THREE.Mesh[] };
 
 // One renderer serves every interior; each is built the first time it opens and kept for the next visit
 export function createInteriors(host: HTMLElement, builders: Record<string, (kit: Kit) => Interior>, opts: { reduced: boolean; textures: string; onExit: (id: string) => void }): Interiors {
 	const view = host.querySelector<HTMLElement>('.cabin-view')!;
 	const prompt = host.querySelector<HTMLElement>('.cabin-prompt')!;
+	const inspectEl = host.querySelector<HTMLElement>('.cabin-inspect')!;
+	const inspectCv = inspectEl.querySelector('canvas')!;
+	const inspectG = inspectCv.getContext('2d')!;
 	const title = host.querySelector<HTMLElement>('.cabin-bar p')!;
 	let renderer: THREE.WebGLRenderer | null = null;
 	let composer: EffectComposer | null = null;
@@ -455,7 +551,12 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 	// The view eases toward where the mouse turns it
 	let yaw = Math.PI, pitch = -0.04, yawGoal = yaw, pitchGoal = pitch;
 	const pos = new THREE.Vector3(), vel = new THREE.Vector3();
-	let leaving = false, atHatch = false, openT = -1, bob = 0;
+	let leaving = false, openT = -1, bob = 0;
+	let groundY = 0; // the floor under the pilot, eased so steps and ramps read as smooth
+	// What F would do now: open the hatch, one of the interior's actions, or nothing
+	const HATCH = 'hatch';
+	let target: Action | typeof HATCH | null = null, shown = '';
+	const promptWhat = [...prompt.querySelectorAll('em')];
 	const keys = new Set<string>();
 	const frustum = new THREE.Frustum(), viewProj = new THREE.Matrix4(), probe = new THREE.Sphere();
 	// The render resolution steps down if frames run long, and stays there
@@ -480,6 +581,34 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 		sky.colorSpace = THREE.SRGBColorSpace;
 		sky.mapping = THREE.EquirectangularReflectionMapping;
 		mat = makeMaterials();
+	}
+
+	// Frees an interior's geometry, materials and textures. Each interior holds a few hundred megabytes of textures;
+	// kept all at once they can exhaust the graphics card's memory, and then the textures that arrive last (photos
+	// drawn in once they load, the poster atlas, video frames) fail to upload and show black. The materials and
+	// textures every interior shares (the environment, the sky, the kit's materials) stay.
+	function unload(l: Loaded) {
+		const shared = new Set<THREE.Material>(Object.values(mat!));
+		const textures = new Set<THREE.Texture>();
+		l.scene.traverse((o) => {
+			const m = o as THREE.Mesh;
+			// A sprite's geometry is shared by every sprite, so only its material goes
+			if (m.geometry && !(o instanceof THREE.Sprite)) m.geometry.dispose();
+			if (o instanceof THREE.InstancedMesh) o.dispose();
+			const list = !m.material ? [] : Array.isArray(m.material) ? m.material : [m.material];
+			for (const x of list) {
+				if (shared.has(x)) continue;
+				for (const v of Object.values(x)) if (v instanceof THREE.Texture) textures.add(v);
+				if (x instanceof THREE.ShaderMaterial) for (const u of Object.values(x.uniforms)) if (u.value instanceof THREE.Texture) textures.add(u.value);
+				x.dispose();
+			}
+		});
+		for (const sl of l.slots) textures.add(sl.live.tex);
+		textures.delete(env!);
+		textures.delete(sky!);
+		for (const t of textures) t.dispose();
+		l.it.leave?.();
+		loaded.delete(l.id);
 	}
 
 	function load(id: string): Loaded {
@@ -523,7 +652,7 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 					fragmentShader: SCREEN_FRAG,
 				});
 				const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), sm);
-				screens.push({ mat: sm, mesh, at: new THREE.Vector3(), reveal: sm.uniforms.uReveal.value, on: booted, booted });
+				screens.push({ mat: sm, mesh, at: new THREE.Vector3(), reveal: sm.uniforms.uReveal.value, on: booted, booted, src: t.image instanceof HTMLCanvasElement ? t.image : null });
 				return mesh;
 			},
 			live(l, at, every, range = 7, radius = 0.7) {
@@ -586,7 +715,7 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 		mergeStatic(scene);
 		// Compile every shader now rather than on the first frames, which would stutter
 		renderer!.compile(scene, camera);
-		return { id, scene, it, screens, slots };
+		return { id, scene, it, screens, slots, meshes: screens.filter((sc) => sc.src).map((sc) => sc.mesh) };
 	}
 
 	const fwd = new THREE.Vector3(), right = new THREE.Vector3(), want = new THREE.Vector3();
@@ -609,15 +738,27 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 		it.collide(pos, 0.2 / S);
 		const speed = Math.hypot(vel.x, vel.z) * S;
 		bob += dt * speed * 5.2;
-		camera.position.set(pos.x, it.eye + (opts.reduced ? 0 : (Math.sin(bob) * 0.018 * Math.min(speed, 1.6)) / S), pos.z).multiplyScalar(S);
+		if (it.ground) groundY += (it.ground(pos) - groundY) * (opts.reduced ? 1 : 1 - Math.exp(-dt * 14));
+		camera.position.set(pos.x, it.eye + groundY + (opts.reduced ? 0 : (Math.sin(bob) * 0.018 * Math.min(speed, 1.6)) / S), pos.z).multiplyScalar(S);
 		camera.rotation.set(pitch, yaw, 0);
 		camera.updateMatrixWorld();
-		// At the hatch and facing it, F opens it
+		// At the hatch and facing it, F opens it; near one of the interior's spots and facing its object, F does that
 		const { hatch } = it;
-		const near = !leaving && pos.z < hatch.z + 1.8 && Math.abs(pos.x) < 0.9 && fwd.z < -0.55;
-		if (near !== atHatch) {
-			atHatch = near;
-			prompt.classList.toggle('on', near);
+		let next: Action | typeof HATCH | null = null;
+		if (!leaving) {
+			if (pos.z < hatch.z + 1.8 && Math.abs(pos.x) < 0.9 && fwd.z < -0.55) next = HATCH;
+			else for (const a of it.actions ?? []) {
+				if (Math.hypot(pos.x - a.x, pos.z - a.z) > a.reach) continue;
+				want.set(a.look.x - pos.x, 0, a.look.z - pos.z).normalize();
+				if (want.dot(fwd) > 0.75) { next = a; break; }
+			}
+		}
+		const label = next === HATCH ? 'open the hatch' : next ? next.label() : shown;
+		if (next !== target || label !== shown) {
+			target = next;
+			prompt.classList.toggle('on', !!next);
+			if (label !== shown) for (const em of promptWhat) em.textContent = label;
+			shown = label;
 		}
 		if (openT >= 0) {
 			openT += dt;
@@ -625,15 +766,22 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 			const k = 1 - Math.exp(-dt * 4), back = hatch.z + 1.15;
 			if (pos.z < back) pos.z += (back - pos.z) * k;
 			pos.x -= pos.x * k;
-			pitchGoal = Math.atan2(hatch.y - it.eye, pos.z - hatch.z);
+			pitchGoal = Math.atan2(hatch.y - it.eye - groundY, pos.z - hatch.z);
 			hatch.wheel.rotation.z = -Math.PI * 2 * THREE.MathUtils.smoothstep(openT, 0, 0.55);
 			hatch.door.position.x = 1.42 * THREE.MathUtils.smoothstep(openT, 0.45, 1.15);
 			// Timed by the animation itself, so the fade never runs ahead of the door
 			if (openT > 0.95) host.classList.add('fading');
 			if (openT > 1.55) { openT = -1; opts.onExit(cur.id); }
 		}
+		// The display under the reticle, if any, can be opened across the view
+		const under = leaving ? null : aimAt(center);
+		if (under !== aimed) {
+			aimed = under;
+			host.classList.toggle('aiming', !!under);
+		}
 		// Wall displays boot as the pilot comes near; all of them run their scanlines
 		const time = (performance.now() - openedAt) / 1000;
+		it.update?.(dt, time);
 		for (const sc of screens) {
 			if (!sc.on && camera.position.distanceTo(sc.at) < it.revealAt) sc.on = true;
 			if (sc.on && sc.reveal < 1) sc.reveal = Math.min(1, sc.reveal + dt / 1.1);
@@ -653,11 +801,59 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 		}
 	}
 
+	// ---------- Reading a display up close: the one under the reticle (or a tap) opens across the view ----------
+	const ray = new THREE.Raycaster(), center = new THREE.Vector2();
+	ray.far = 18;
+	let aimed: Screen | null = null;
+	let inspecting: { sc: Screen; slot: Slot | null; next: number } | null = null;
+	function aimAt(ndc: THREE.Vector2) {
+		if (!cur || !cur.meshes.length) return null;
+		ray.setFromCamera(ndc, camera);
+		const hit = ray.intersectObjects(cur.meshes, false)[0];
+		return hit ? cur.screens.find((sc) => sc.mesh === hit.object) ?? null : null;
+	}
+	function copyInspect() {
+		const src = inspecting?.sc.src;
+		if (!src) return;
+		if (inspectCv.width !== src.width || inspectCv.height !== src.height) {
+			inspectCv.width = src.width;
+			inspectCv.height = src.height;
+			inspectEl.style.setProperty('--a', String(src.width / src.height));
+		}
+		inspectG.drawImage(src, 0, 0);
+	}
+	function openInspect(sc: Screen) {
+		if (!cur || !sc.src || leaving) return;
+		// A live display keeps drawing at its own pace while open
+		const shown = sc.mat.uniforms.uMap.value;
+		inspecting = { sc, slot: cur.slots.find((sl) => sl.live.tex === shown) ?? null, next: 0 };
+		keys.clear();
+		vel.set(0, 0, 0);
+		copyInspect();
+		inspectEl.hidden = false;
+		void inspectEl.offsetWidth;
+		host.classList.add('inspecting');
+		prompt.classList.remove('on');
+		// The mouse stays captured, so closing the display goes straight back to looking around
+	}
+	function closeInspect(relock = false, byClick = false) {
+		if (!inspecting) return;
+		inspecting = null;
+		host.classList.remove('inspecting');
+		inspectEl.hidden = true;
+		target = null;
+		last = performance.now();
+		judgedAt = last + 1500;
+		if (relock && matchMedia('(pointer: fine)').matches) lock(byClick);
+	}
+
 	function leave() {
 		if (leaving || !cur) return;
+		closeInspect();
 		leaving = true;
-		atHatch = false;
+		target = null;
 		prompt.classList.remove('on');
+		cur.it.leave?.();
 		host.classList.add('leaving');
 		if (document.pointerLockElement) document.exitPointerLock();
 		if (opts.reduced) { opts.onExit(cur.id); return; }
@@ -678,6 +874,17 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 	}
 
 	function frame(now: number) {
+		// While a display is open the scene holds still behind it; only that display keeps updating
+		if (inspecting) {
+			const time = (now - openedAt) / 1000;
+			if (inspecting.slot && time >= inspecting.next) {
+				inspecting.next = time + inspecting.slot.every;
+				inspecting.slot.live.draw(time);
+				copyInspect();
+			}
+			raf = requestAnimationFrame(frame);
+			return;
+		}
 		const ms = now - last;
 		const dt = Math.min(ms / 1000, 0.05);
 		last = now;
@@ -705,9 +912,14 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 
 	// ---------- Input: keys, a captured mouse (or touch drag) to look, the touch pad ----------
 	const keyMap: Record<string, string> = { KeyW: 'f', ArrowUp: 'f', KeyS: 'b', ArrowDown: 'b', KeyA: 'l', ArrowLeft: 'l', KeyD: 'r', ArrowRight: 'r', ShiftLeft: 'run', ShiftRight: 'run' };
+	const act = () => {
+		if (target === HATCH) leave();
+		else target?.run();
+	};
 	addEventListener('keydown', (e) => {
 		if (!isOpen) return;
-		if (e.code === 'KeyF' && atHatch) { leave(); e.preventDefault(); return; }
+		if (inspecting) { if (e.code !== 'Escape') e.preventDefault(); return; }
+		if (e.code === 'KeyF' && target) { if (!e.repeat) act(); e.preventDefault(); return; }
 		if (leaving || !(e.code in keyMap)) return;
 		keys.add(keyMap[e.code]);
 		e.preventDefault();
@@ -721,29 +933,40 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 	// The mouse is captured (pointer lock): the cursor is hidden and the view turns as far as the mouse moves.
 	// Browsers only capture it on a click, so entering through a module's button captures it at once;
 	// otherwise, and after Escape frees it, a click on the view captures it again.
-	const lock = () => {
+	// `byClick` says whether the request answers the pilot's own click, which is what browsers require.
+	const lock = (byClick = false) => {
 		if (!isOpen || leaving || noLock || document.pointerLockElement === view) return;
+		askedByClick = byClick;
 		try { (view.requestPointerLock() as unknown as Promise<void> | undefined)?.catch?.(() => {}); } catch { /* not allowed here */ }
 	};
-	// A browser that refuses to capture the mouse falls back to dragging to look
-	let noLock = false;
+	// A refusal is usually passing: the request came without a click (opening from a link, a reload) or just after
+	// Escape freed the mouse, when browsers wait a moment. Then the card asks for a click and the next one captures it.
+	// Only a browser that refuses a click twice, well clear of an Escape, cannot capture at all (an embedded preview,
+	// say), and falls back to dragging to look.
+	let noLock = false, askedByClick = false, clickRefusals = 0;
 	document.addEventListener('pointerlockerror', () => {
-		if (!isOpen) return;
+		if (!isOpen || !askedByClick || performance.now() - lockReleasedAt < 1500) return;
+		if (++clickRefusals < 2) return;
 		noLock = true;
 		host.classList.add('no-lock');
 	});
 	document.addEventListener('pointerlockchange', () => {
 		const locked = document.pointerLockElement === view;
 		host.classList.toggle('locked', locked);
-		if (!locked) lockReleasedAt = performance.now();
+		if (locked) clickRefusals = 0;
+		else lockReleasedAt = performance.now();
 	});
 	// Some browsers report an occasional huge jump while the mouse is captured; those are clipped
 	const clip = (v: number) => THREE.MathUtils.clamp(v, -120, 120);
-	document.addEventListener('mousemove', (e) => { if (isOpen && document.pointerLockElement === view) look(clip(e.movementX), clip(e.movementY), 0.0022); });
-	prompt.addEventListener('click', () => { if (atHatch) leave(); });
-	host.querySelector('.cabin-capture')?.addEventListener('click', lock);
+	document.addEventListener('mousemove', (e) => { if (isOpen && !inspecting && document.pointerLockElement === view) look(clip(e.movementX), clip(e.movementY), 0.0022); });
+	inspectEl.addEventListener('click', () => closeInspect(true, true));
+	prompt.addEventListener('click', act);
+	host.querySelector('.cabin-capture')?.addEventListener('click', () => lock(true));
 	let drag: { x: number; y: number } | null = null;
+	// A press that barely moves is a tap: without a captured mouse, it opens the display under the pointer
+	let tap: { t: number; moved: number } | null = null;
 	view.addEventListener('pointermove', (e) => {
+		if (tap) tap.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
 		if (e.pointerType === 'mouse') {
 			if (noLock && e.buttons & 1) look(e.movementX, e.movementY, 0.0035);
 			return;
@@ -753,9 +976,25 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 		drag = { x: e.clientX, y: e.clientY };
 	});
 	view.addEventListener('pointerdown', (e) => {
-		if (e.pointerType === 'mouse') { lock(); return; }
+		// With the mouse captured, a left click opens the display under the reticle, and the next closes it again
+		if (e.pointerType === 'mouse' && document.pointerLockElement === view) {
+			if (e.button !== 0) return;
+			if (inspecting) closeInspect();
+			else if (aimed) openInspect(aimed);
+			return;
+		}
+		tap = noLock || e.pointerType !== 'mouse' ? { t: performance.now(), moved: 0 } : null;
+		if (e.pointerType === 'mouse') { lock(true); return; }
 		drag = { x: e.clientX, y: e.clientY };
 		try { view.setPointerCapture(e.pointerId); } catch { /* the pointer is already gone */ }
+	});
+	view.addEventListener('pointerup', (e) => {
+		if (tap && tap.moved < 8 && performance.now() - tap.t < 400) {
+			const r = view.getBoundingClientRect();
+			const sc = aimAt(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1));
+			if (sc) openInspect(sc);
+		}
+		tap = null;
 	});
 	for (const ev of ['pointerup', 'pointercancel']) view.addEventListener(ev, () => { drag = null; });
 	host.querySelectorAll<HTMLButtonElement>('.cabin-pad button').forEach((b) => {
@@ -769,6 +1008,8 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 			if (isOpen && cur?.id === id) return;
 			if (isOpen) api.close();
 			if (!renderer) setup();
+			// Only one interior is kept on the graphics card: entering another frees the last one first
+			for (const other of [...loaded.values()]) if (other.id !== id) unload(other);
 			let l = loaded.get(id);
 			if (!l) { l = load(id); loaded.set(id, l); }
 			cur = l;
@@ -780,9 +1021,11 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 			openedAt = performance.now();
 			pos.copy(it.spawn);
 			vel.set(0, 0, 0);
+			groundY = it.ground ? it.ground(pos) : 0;
 			yaw = yawGoal = it.spawnYaw;
 			pitch = pitchGoal = -0.04;
-			leaving = atHatch = false;
+			leaving = false;
+			target = null;
 			openT = -1;
 			it.hatch.door.position.setX(0);
 			it.hatch.wheel.rotation.set(0, 0, 0);
@@ -805,6 +1048,7 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 		},
 		close() {
 			if (!isOpen) return;
+			closeInspect();
 			isOpen = false;
 			cancelAnimationFrame(raf);
 			raf = 0;
@@ -813,11 +1057,14 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 			host.classList.remove('open', 'fading', 'locked', 'leaving');
 			host.hidden = true;
 			prompt.classList.remove('on');
-			atHatch = false;
+			target = null;
+			cur?.it.leave?.();
 		},
 		get isOpen() { return isOpen; },
 		get current() { return cur?.id ?? ''; },
 		get lockReleasedAt() { return lockReleasedAt; },
+		get inspecting() { return !!inspecting; },
+		closeInspect: () => closeInspect(true),
 	};
 	return api;
 }

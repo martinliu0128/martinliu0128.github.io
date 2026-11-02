@@ -1,7 +1,9 @@
 // A crewed survey vessel built from primitives and canvas textures, no model files.
 // Bow to stern along +Z to -Z: a command module with a lit cockpit and docking port, a node carrying the
-// high-gain antenna, a spinning habitat ring with one pod per bay, a truss spine with a pressurized corridor,
-// solar wings, radiator wings, propellant tanks, a reactor behind its shadow shield, and a plasma engine.
+// high-gain antenna with a crew shuttle and a logistics module berthed either side, a spinning habitat ring with
+// one pod per bay, a truss spine with a pressurized corridor, a robotic arm and two pairs of solar wings, a habitat
+// cross of four crew cabins, a second, counter-rotating ring of six more, cargo pallets, radiator wings, pressurant
+// and propellant tanks, a reactor behind its shadow shield, and a plasma engine.
 // The command module and each bay are sections: each has a picking proxy, a highlight shell, a point the
 // page's leaders start from, and a centre and reach the camera can close in on.
 import * as THREE from 'three';
@@ -29,7 +31,9 @@ export type Vessel = {
 	update(t: number, dt: number, near: number): void; // near: 0 far away, 1 in the vessel's close-up
 };
 
-const SCALE = 0.085; // model units to world units: about one unit long, overall
+const SCALE = 0.095; // model units to world units: about one and a half units long, overall
+const AFT = -3.2; // how far aft the engine section sits behind the habitat cross, in model units
+const MID = 1.5; // the model is shifted forward by this much so its length centres on the root
 const RING_Z = 2.85, RING_R = 2.35, POD_R = 0.4;
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -473,6 +477,7 @@ export function buildVessel(bays: Bay[]): Vessel {
 	const root = new THREE.Group();
 	const model = new THREE.Group();
 	model.scale.setScalar(SCALE);
+	model.position.z = MID * SCALE;
 	root.add(model);
 	const hull = new Parts();
 	const hullAdd: Add = (mat, g) => hull.add(mat, g);
@@ -555,7 +560,7 @@ export function buildVessel(bays: Bay[]): Vessel {
 			handrail(add, m.rail, radial.clone().multiplyScalar(0.62).add(V(0, 0, 3.84)), radial.clone().multiplyScalar(0.62).add(V(0, 0, 4.66)), radial);
 		}
 		// Hardware around the hull, clear of the markings on top and the thruster ring
-		greebles(add, hardware, { r: 0.62, z0: 3.82, z1: 4.68, n: 80, seed: 41, avoid: (th, z) => Math.abs(wrap(th - Math.PI / 2)) < 0.55 || (z > 4.38 && z < 4.62) });
+		greebles(add, hardware, { r: 0.62, z0: 3.82, z1: 4.68, n: 115, seed: 41, avoid: (th, z) => Math.abs(wrap(th - Math.PI / 2)) < 0.55 || (z > 4.38 && z < 4.62) });
 		add(m.metal, strut(V(-0.45, 0.42, 4.2), V(-0.82, 0.86, 4.0), 0.006));
 		add(m.metal, strut(V(0.5, -0.36, 4.4), V(0.92, -0.62, 4.6), 0.006));
 		add(m.paint, new THREE.SphereGeometry(0.035, 12, 8).translate(0.92, -0.62, 4.6));
@@ -703,7 +708,7 @@ export function buildVessel(bays: Bay[]): Vessel {
 		// so they are turned onto the pod's axis first: theta -90° lands on the window face, 0° outboard.
 		const podM = frame.clone().multiply(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
 		greebles((mat, g) => pod.add(mat, g, podM), hardware, {
-			r: POD_R + 0.03, z0: -L / 2 + 0.08, z1: L / 2 - 0.08, n: 46, seed: 90 + i, size: 0.8,
+			r: POD_R + 0.03, z0: -L / 2 + 0.08, z1: L / 2 - 0.08, n: 66, seed: 90 + i, size: 0.8,
 			avoid: (t) => Math.abs(wrap(t + Math.PI / 2)) < 0.9 || Math.abs(wrap(t)) < 0.35 || Math.abs(wrap(t - Math.PI)) < 0.3,
 		});
 
@@ -747,8 +752,8 @@ export function buildVessel(bays: Bay[]): Vessel {
 	rp.build(ring);
 
 	// ---------- Spine: pressurized corridor inside a box truss, with conduits, a cable tray and a handrail ----------
-	hull.add(m.hullLong, tube(0.17, 0.17, -3.5, 2.45, 32));
-	const W = 0.34, z0 = -3.5, z1 = 2.4, bayLen = 0.55;
+	const W = 0.34, z0 = -3.5 + AFT, z1 = 2.4, bayLen = 0.55;
+	hull.add(m.hullLong, tube(0.17, 0.17, z0, 2.45, 32));
 	const corners = [V(W, W), V(-W, W), V(-W, -W), V(W, -W)];
 	for (let z = z0; z < z1 - 1e-3; z += bayLen) {
 		const za = z, zb = Math.min(z + bayLen, z1);
@@ -767,7 +772,7 @@ export function buildVessel(bays: Bay[]): Vessel {
 	hull.add(m.kapton, pipe([V(0.27, -0.22, z0), V(0.28, -0.23, 0), V(0.27, -0.22, z1)], 0.018, 64));
 	hull.add(m.dark, box(0.1, 0.03, z1 - z0, at(-0.2, 0.3, (z0 + z1) / 2)));
 	handrail(hullAdd, m.rail, V(0, 0.17, z0 + 0.2), V(0, 0.17, z1 - 0.2), Y_AXIS, 0.04);
-	greebles(hullAdd, hardware, { r: 0.17, z0: z0 + 0.1, z1: z1 - 0.1, n: 120, seed: 47, size: 0.55, avoid: (th) => Math.abs(wrap(th - Math.PI / 2)) < 0.4 });
+	greebles(hullAdd, hardware, { r: 0.17, z0: z0 + 0.1, z1: z1 - 0.1, n: 200, seed: 47, size: 0.55, avoid: (th) => Math.abs(wrap(th - Math.PI / 2)) < 0.4 });
 	// Avionics boxes under silver foil
 	for (const z of [-0.5, -0.95, 1.6]) {
 		hull.add(m.silver, box(0.36, 0.16, 0.36, at(0, -0.48, z)));
@@ -775,14 +780,14 @@ export function buildVessel(bays: Bay[]): Vessel {
 		for (const s of [-1, 1]) hull.add(m.gunmetal, box(0.02, 0.1, 0.3, at(s * 0.19, -0.48, z)));
 	}
 
-	// ---------- Solar wings, port and starboard: two blankets either side of a lattice mast ----------
-	const wingZ = 0.9, tilt = 0.22;
-	for (const s of [-1, 1]) {
-		hull.add(m.metal, strut(V(s * W, 0, wingZ), V(s * 0.88, 0, wingZ), 0.05, 12));
-		hull.add(m.gunmetal, new THREE.CylinderGeometry(0.11, 0.11, 0.16, 24).rotateZ(Math.PI / 2), at(s * 0.88, 0, wingZ));
-		hull.add(m.gold, new THREE.CylinderGeometry(0.115, 0.115, 0.05, 24).rotateZ(Math.PI / 2), at(s * 0.88, 0, wingZ));
-		const wing = new THREE.Matrix4().makeRotationX(tilt).premultiply(at(0, 0, wingZ));
-		const span0 = 0.97, span = 3.1, panels = 8, gap = 0.02;
+	// ---------- Solar wings, port and starboard, in two pairs: two blankets either side of a lattice mast ----------
+	const wingZ = 0.9;
+	for (const [wz, tilt, span, panels] of [[wingZ, 0.22, 3.1, 8], [-0.2, -0.26, 2.5, 6]] as const) for (const s of [-1, 1]) {
+		hull.add(m.metal, strut(V(s * W, 0, wz), V(s * 0.88, 0, wz), 0.05, 12));
+		hull.add(m.gunmetal, new THREE.CylinderGeometry(0.11, 0.11, 0.16, 24).rotateZ(Math.PI / 2), at(s * 0.88, 0, wz));
+		hull.add(m.gold, new THREE.CylinderGeometry(0.115, 0.115, 0.05, 24).rotateZ(Math.PI / 2), at(s * 0.88, 0, wz));
+		const wing = new THREE.Matrix4().makeRotationX(tilt).premultiply(at(0, 0, wz));
+		const span0 = 0.97, gap = 0.02;
 		const W2: Add = (mat, g) => hull.add(mat, g, wing);
 		for (let k = 0; k <= 16; k++) {
 			const x = s * (span0 + (k / 16) * span);
@@ -811,56 +816,306 @@ export function buildVessel(bays: Bay[]): Vessel {
 		}
 	}
 
+	// The engine section, built where it first stood and moved aft past the habitat cross
+	const aft = (mat: THREE.Material, g: THREE.BufferGeometry, mm?: THREE.Matrix4) => hull.add(mat, g, mm ? mm.clone().premultiply(at(0, 0, AFT)) : at(0, 0, AFT));
+
 	// ---------- Radiator wings, above and below: three panels each, with manifolds ----------
 	for (const s of [-1, 1]) {
 		const y0 = 0.42, zc = -1.55, len = 1.6;
 		for (let k = 0; k < 3; k++) {
 			const ya = y0 + 0.04 + k * 0.62, yb = ya + 0.58;
-			hull.add(m.radiator, new THREE.BoxGeometry(0.018, yb - ya, len), new THREE.Matrix4().makeRotationZ(s * (k - 1) * 0.04).setPosition(0, s * (ya + yb) / 2, zc));
-			hull.add(m.metal, box(0.03, 0.03, len, at(0, s * yb, zc)));
+			aft(m.radiator, new THREE.BoxGeometry(0.018, yb - ya, len), new THREE.Matrix4().makeRotationZ(s * (k - 1) * 0.04).setPosition(0, s * (ya + yb) / 2, zc));
+			aft(m.metal, box(0.03, 0.03, len, at(0, s * yb, zc)));
 		}
-		hull.add(m.metal, box(0.03, 1.86, 0.03, at(0, s * (y0 + 0.97), zc + len / 2)));
-		hull.add(m.metal, box(0.03, 1.86, 0.03, at(0, s * (y0 + 0.97), zc - len / 2)));
-		hull.add(m.gold, tube(0.05, 0.05, zc - len / 2, zc + len / 2, 16).translate(0, s * y0, 0));
-		for (let k = 0; k < 3; k++) hull.add(m.truss, strut(V(0, s * W, zc - 0.6 + k * 0.6), V(0, s * y0, zc - 0.6 + k * 0.6), 0.02));
+		aft(m.metal, box(0.03, 1.86, 0.03, at(0, s * (y0 + 0.97), zc + len / 2)));
+		aft(m.metal, box(0.03, 1.86, 0.03, at(0, s * (y0 + 0.97), zc - len / 2)));
+		aft(m.gold, tube(0.05, 0.05, zc - len / 2, zc + len / 2, 16).translate(0, s * y0, 0));
+		for (let k = 0; k < 3; k++) aft(m.truss, strut(V(0, s * W, zc - 0.6 + k * 0.6), V(0, s * y0, zc - 0.6 + k * 0.6), 0.02));
 	}
 
 	// ---------- Propellant tanks under gold insulation, strapped, with feed lines to the engine ----------
 	for (let i = 0; i < 4; i++) {
 		const a = Math.PI / 4 + (i * Math.PI) / 2;
 		const c = V(Math.cos(a) * 0.66, Math.sin(a) * 0.66, -2.95);
-		hull.add(m.gold, new THREE.CapsuleGeometry(0.3, 0.72, 12, 40).rotateX(Math.PI / 2), at(c.x, c.y, c.z));
-		for (const dz of [-0.3, 0, 0.3]) hull.add(m.metal, hoop(0.305, 0.016, 0, 48).translate(c.x, c.y, c.z + dz));
-		hull.add(m.gunmetal, new THREE.CylinderGeometry(0.05, 0.05, 0.06, 16).rotateX(Math.PI / 2).translate(c.x, c.y, c.z + 0.68));
-		hull.add(m.silver, pipe([c.clone().add(V(0, 0, -0.64)), V(c.x * 0.75, c.y * 0.75, -3.62), V(c.x * 0.45, c.y * 0.45, -4.2), V(c.x * 0.3, c.y * 0.3, -4.4)], 0.022, 32));
-		for (const z of [-2.7, -3.2]) hull.add(m.truss, strut(V(Math.cos(a) * 0.34, Math.sin(a) * 0.34, z), V(c.x * 0.72, c.y * 0.72, z), 0.02));
+		aft(m.gold, new THREE.CapsuleGeometry(0.3, 0.72, 12, 40).rotateX(Math.PI / 2), at(c.x, c.y, c.z));
+		for (const dz of [-0.3, 0, 0.3]) aft(m.metal, hoop(0.305, 0.016, 0, 48).translate(c.x, c.y, c.z + dz));
+		aft(m.gunmetal, new THREE.CylinderGeometry(0.05, 0.05, 0.06, 16).rotateX(Math.PI / 2).translate(c.x, c.y, c.z + 0.68));
+		aft(m.silver, pipe([c.clone().add(V(0, 0, -0.64)), V(c.x * 0.75, c.y * 0.75, -3.62), V(c.x * 0.45, c.y * 0.45, -4.2), V(c.x * 0.3, c.y * 0.3, -4.4)], 0.022, 32));
+		for (const z of [-2.7, -3.2]) aft(m.truss, strut(V(Math.cos(a) * 0.34, Math.sin(a) * 0.34, z), V(c.x * 0.72, c.y * 0.72, z), 0.02));
 	}
 
 	// ---------- Shadow shield, reactor and plasma engine ----------
-	hull.add(m.kapton, tube(0.45, 0.84, -3.82, -3.46, 64));
-	hull.add(m.metal, hoop(0.84, 0.02, -3.46, 96));
-	hull.add(m.metal, tube(0.38, 0.38, -4.34, -3.82, 48));
+	aft(m.kapton, tube(0.45, 0.84, -3.82, -3.46, 64));
+	aft(m.metal, hoop(0.84, 0.02, -3.46, 96));
+	aft(m.metal, tube(0.38, 0.38, -4.34, -3.82, 48));
 	for (let i = 0; i < 16; i++) {
 		const a = (i / 16) * Math.PI * 2;
-		hull.add(m.dark, box(0.016, 0.2, 0.46, new THREE.Matrix4().makeRotationZ(a).setPosition(-Math.sin(a) * 0.46, Math.cos(a) * 0.46, -4.08)));
+		aft(m.dark, box(0.016, 0.2, 0.46, new THREE.Matrix4().makeRotationZ(a).setPosition(-Math.sin(a) * 0.46, Math.cos(a) * 0.46, -4.08)));
 	}
-	hull.add(m.dark, tube(0.22, 0.32, -4.6, -4.34, 48));
+	aft(m.dark, tube(0.22, 0.32, -4.6, -4.34, 48));
 	for (const a of [0, Math.PI / 2]) {
 		const p = V(Math.cos(a) * 0.36, Math.sin(a) * 0.36, -4.36), q = V(Math.cos(a) * 0.5, Math.sin(a) * 0.5, -4.95);
-		hull.add(m.metal, strut(p, q, 0.025, 10));
-		hull.add(m.gunmetal, strut(p, p.clone().lerp(q, 0.45), 0.04, 12));
+		aft(m.metal, strut(p, q, 0.025, 10));
+		aft(m.gunmetal, strut(p, p.clone().lerp(q, 0.45), 0.04, 12));
 	}
 	const bellR = (t: number) => 0.2 + 0.44 * Math.pow(t, 0.62);
 	const bell = Array.from({ length: 24 }, (_, i) => { const t = i / 23; return new THREE.Vector2(bellR(t), -t * 0.95); });
 	// Heat tint: bronze at the throat through blue to dark grey at the exit
 	const nozzleMat = std({ map: gradientTexture([[0, '#34373d'], [0.45, '#4f5c78'], [0.8, '#8a5a3a'], [1, '#b67c48']]), roughness: 0.3, metalness: 0.9, side: THREE.DoubleSide });
-	hull.add(nozzleMat, new THREE.LatheGeometry(bell, 72).rotateX(Math.PI / 2).translate(0, 0, -4.6));
-	for (const t of [0.35, 0.7]) hull.add(m.copper, hoop(bellR(t) + 0.025, 0.03, -4.6 - t * 0.95, 72));
+	aft(nozzleMat, new THREE.LatheGeometry(bell, 72).rotateX(Math.PI / 2).translate(0, 0, -4.6));
+	for (const t of [0.35, 0.7]) aft(m.copper, hoop(bellR(t) + 0.025, 0.03, -4.6 - t * 0.95, 72));
 	for (let i = 0; i < 24; i++) {
 		const a = (i / 24) * Math.PI * 2;
 		const p = (t: number) => V(Math.cos(a) * (bellR(t) + 0.012), Math.sin(a) * (bellR(t) + 0.012), -4.6 - t * 0.95);
-		hull.add(m.copper, strut(p(0.2), p(0.9), 0.008, 4));
+		aft(m.copper, strut(p(0.2), p(0.9), 0.008, 4));
 	}
+	// ---------- Berthed at the node: a crew shuttle on the -X port, a logistics module on the +X port ----------
+	// Each is built along +Z from the port outward, then turned onto the berthing axis
+	const berth = (s: number) => new THREE.Matrix4().makeRotationY((s * Math.PI) / 2).premultiply(at(0, 0, 3.53));
+	{
+		const sh = berth(-1);
+		const S: Add = (mat, g) => hull.add(mat, g, sh);
+		// Docking adapter, then the capsule nose first, its heat shield, and the service module behind it
+		S(m.metal, tube(0.16, 0.16, 0.78, 0.86, 32));
+		S(m.gunmetal, hoop(0.17, 0.022, 0.84, 32));
+		S(m.paint, tube(0.12, 0.25, 0.86, 1.18, 48));
+		S(m.dark, tube(0.258, 0.258, 1.18, 1.22, 48));
+		for (let k = 0; k < 4; k++) {
+			const a = Math.PI / 2 - 0.66 + k * 0.44;
+			const radial = V(Math.cos(a), Math.sin(a), 0), tan = V(-Math.sin(a), Math.cos(a), 0);
+			S(m.cockpit, box(0.05, 0.012, 0.04, basis(tan, radial, Z_AXIS, radial.clone().multiplyScalar(0.19).add(V(0, 0, 1.02)))));
+		}
+		S(m.silver, tube(0.25, 0.25, 1.22, 1.6, 48));
+		for (let k = 0; k < 6; k++) {
+			const a = (k / 6) * Math.PI * 2 + 0.26;
+			const radial = V(Math.cos(a), Math.sin(a), 0), tan = V(-Math.sin(a), Math.cos(a), 0);
+			S(m.radiator, box(0.1, 0.008, 0.3, basis(tan, radial, Z_AXIS, radial.clone().multiplyScalar(0.256).add(V(0, 0, 1.41)))));
+		}
+		for (const z of [1.24, 1.58]) S(m.metal, hoop(0.255, 0.012, z, 48));
+		S(m.gunmetal, tube(0.25, 0.18, 1.6, 1.66, 48));
+		S(m.dark, tube(0.06, 0.13, 1.66, 1.8, 24));
+		// Small solar panels standing up and down, clear of the ring's spokes
+		for (const s2 of [-1, 1]) {
+			S(m.metal, strut(V(0, s2 * 0.25, 1.42), V(0, s2 * 0.36, 1.42), 0.012));
+			S(m.solar, new THREE.PlaneGeometry(0.26, 0.5).rotateY(Math.PI / 2).translate(0, s2 * 0.62, 1.42));
+			S(m.metal, box(0.012, 0.52, 0.012, at(0, s2 * 0.62, 1.29)));
+			S(m.metal, box(0.012, 0.52, 0.012, at(0, s2 * 0.62, 1.55)));
+		}
+		for (let k = 0; k < 4; k++) {
+			const a = (k / 4) * Math.PI * 2;
+			const radial = V(Math.cos(a), Math.sin(a), 0), tan = V(-Math.sin(a), Math.cos(a), 0);
+			S(m.paint, box(0.06, 0.04, 0.07, basis(tan, radial, Z_AXIS, radial.clone().multiplyScalar(0.27).add(V(0, 0, 1.3)))));
+		}
+		greebles(S, hardware, { r: 0.25, z0: 1.25, z1: 1.56, n: 16, seed: 501, size: 0.4, avoid: (th) => Math.abs(wrap(th - Math.PI / 2)) < 0.3 || Math.abs(wrap(th + Math.PI / 2)) < 0.3 });
+	}
+	{
+		const lm = berth(1);
+		const C: Add = (mat, g) => hull.add(mat, g, lm);
+		const lmPlate = plate({ seed: 44, aspect: (Math.PI * 2 * 0.24) / 0.76, grime: 1.2 });
+		C(m.metal, tube(0.2, 0.2, 0.78, 0.86, 32));
+		C(m.gunmetal, hoop(0.21, 0.02, 0.85, 32));
+		C(lmPlate, tube(0.24, 0.24, 0.86, 1.62, 48));
+		for (const z of [0.88, 1.24, 1.6]) C(m.metal, hoop(0.243, 0.014, z, 48));
+		C(m.paint, new THREE.SphereGeometry(0.24, 32, 10, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2).scale(1, 1, 0.4).translate(0, 0, 1.62));
+		for (let k = 0; k < 4; k++) {
+			const g = new THREE.CylinderGeometry(0.25, 0.25, 0.3, 12, 1, true, k * (Math.PI / 2) + 0.2, Math.PI / 2 - 0.4);
+			C(m.gold, g.rotateX(Math.PI / 2).translate(0, 0, 1.06));
+		}
+		// A grapple fixture for the arm
+		C(m.dark, box(0.1, 0.012, 0.1, at(0, 0.25, 1.42)));
+		C(m.metal, new THREE.CylinderGeometry(0.012, 0.012, 0.07, 10).translate(0, 0.29, 1.42));
+		greebles(C, hardware, { r: 0.24, z0: 0.9, z1: 1.58, n: 26, seed: 503, size: 0.5, avoid: (th, z) => z > 0.92 && z < 1.21 });
+	}
+	// Hardware around the node, clear of the berthing ports and the antenna mast
+	greebles(hullAdd, hardware, {
+		r: 0.46, z0: 3.3, z1: 3.76, n: 30, seed: 61, size: 0.6,
+		avoid: (th) => Math.abs(wrap(th)) < 0.5 || Math.abs(wrap(th - Math.PI)) < 0.5 || Math.abs(wrap(th - Math.PI / 2)) < 0.3,
+	});
+
+	// ---------- Robotic arm on the spine: shoulder, two booms, wrist and end effector, folded ----------
+	{
+		const base = V(0, W + 0.02, 2.05), shoulder = base.clone().add(V(0, 0.13, 0));
+		const elbow = V(0.62, 0.95, 1.75), wrist = V(1.12, 0.72, 2.22), tip = V(1.2, 0.6, 2.34);
+		hull.add(m.gunmetal, new THREE.CylinderGeometry(0.07, 0.085, 0.13, 24), at(base.x, base.y + 0.065, base.z));
+		hull.add(m.dark, box(0.22, 0.03, 0.22, at(base.x, base.y + 0.015, base.z)));
+		for (const [a, b, r] of [[shoulder, elbow, 0.04], [elbow, wrist, 0.034]] as const) {
+			hull.add(m.paint, strut(a, b, r, 16));
+			hull.add(m.gunmetal, strut(a, a.clone().lerp(b, 0.12), r * 1.18, 16));
+			hull.add(m.gunmetal, strut(b, b.clone().lerp(a, 0.12), r * 1.18, 16));
+			hull.add(m.kapton, pipe([a.clone().add(V(0, 0.045, 0)), a.clone().lerp(b, 0.5).add(V(0, 0.05, 0.01)), b.clone().add(V(0, 0.045, 0))], 0.007, 24));
+		}
+		for (const [p, r] of [[shoulder, 0.065], [elbow, 0.06], [wrist, 0.052]] as const) {
+			hull.add(m.dark, new THREE.CylinderGeometry(r, r, r * 1.6, 20).rotateZ(Math.PI / 2), at(p.x, p.y, p.z));
+			hull.add(m.metal, new THREE.CylinderGeometry(r * 1.05, r * 1.05, r * 0.25, 20).rotateZ(Math.PI / 2), at(p.x + r * 0.7, p.y, p.z));
+		}
+		hull.add(m.gunmetal, strut(wrist, tip, 0.045, 16));
+		hull.add(m.dark, strut(tip, tip.clone().add(V(0.02, -0.04, 0.05)), 0.05, 16));
+		hull.add(m.gold, box(0.05, 0.04, 0.06, at(wrist.x + 0.02, wrist.y + 0.07, wrist.z)));
+		hull.add(m.glass, new THREE.CylinderGeometry(0.014, 0.014, 0.02, 12).rotateX(Math.PI / 2).translate(wrist.x + 0.02, wrist.y + 0.07, wrist.z + 0.035));
+	}
+
+	// ---------- Cargo pallets either side of the spine, loaded with stowage boxes and gas bottles ----------
+	for (const s of [-1, 1]) {
+		const rand = rng(s > 0 ? 701 : 709), pz0 = -2.0, pz1 = -0.85;
+		aft(m.gunmetal, box(0.04, 0.5, pz1 - pz0, at(s * 0.4, 0, (pz0 + pz1) / 2)));
+		for (const z of [pz0 + 0.1, (pz0 + pz1) / 2, pz1 - 0.1]) aft(m.truss, strut(V(s * W, 0.2, z), V(s * 0.39, 0.2, z), 0.014));
+		for (const z of [pz0 + 0.1, pz1 - 0.1]) aft(m.truss, strut(V(s * W, -0.2, z), V(s * 0.39, -0.2, z), 0.014));
+		const loads = [m.silver, m.gold, m.paint, m.kapton, m.dark, m.silver];
+		let z = pz0 + 0.04;
+		while (z < pz1 - 0.12) {
+			const len = 0.14 + rand() * 0.22, ht = 0.12 + rand() * 0.24, d = 0.1 + rand() * 0.2, y = (rand() - 0.5) * (0.46 - ht);
+			aft(loads[Math.floor(rand() * loads.length)], box(d, ht, len, at(s * (0.42 + d / 2), y, z + len / 2)));
+			if (rand() < 0.5) aft(m.dark, box(d * 0.6, 0.01, len * 0.7, at(s * (0.42 + d / 2), y + ht / 2 + 0.005, z + len / 2)));
+			z += len + 0.03;
+		}
+		// A nitrogen bottle lying along the pallet's foot
+		aft(m.paint, new THREE.CapsuleGeometry(0.05, 0.6, 6, 20).rotateX(Math.PI / 2), at(s * 0.5, -0.2, -1.4));
+		for (const dz of [-0.2, 0.2]) aft(m.metal, hoop(0.052, 0.008, 0, 24).translate(s * 0.5, -0.2, -1.4 + dz));
+	}
+
+	// ---------- Under the spine: a phased-array antenna and a sensor turret ----------
+	{
+		hull.add(m.dark, box(0.46, 0.03, 0.62, at(0, -0.52, 0.35)));
+		for (let i = 0; i < 4; i++) for (let k = 0; k < 6; k++) hull.add(m.gold, box(0.075, 0.006, 0.075, at(-0.165 + i * 0.11, -0.538, 0.1 + k * 0.1)));
+		for (const z of [0.1, 0.6]) hull.add(m.truss, strut(V(0, -W, z), V(0, -0.5, z), 0.018));
+		hull.add(m.gunmetal, new THREE.CylinderGeometry(0.08, 0.1, 0.1, 24), at(0, -0.4, 2.0));
+		hull.add(m.glass, new THREE.SphereGeometry(0.075, 24, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), at(0, -0.45, 2.0));
+	}
+
+	// ---------- Pressurant spheres between the radiators and the propellant tanks ----------
+	for (let i = 0; i < 4; i++) {
+		const a = Math.PI / 4 + (i * Math.PI) / 2;
+		const c = V(Math.cos(a) * 0.62, Math.sin(a) * 0.62, -2.06);
+		aft(m.silver, new THREE.SphereGeometry(0.16, 28, 18), at(c.x, c.y, c.z));
+		aft(m.metal, new THREE.TorusGeometry(0.162, 0.012, 8, 40), at(c.x, c.y, c.z));
+		aft(m.truss, strut(V(Math.cos(a) * 0.34 * Math.SQRT2, Math.sin(a) * 0.34 * Math.SQRT2, -2.06), c.clone().multiplyScalar(0.76), 0.016));
+		aft(m.copper, pipe([c.clone().add(V(0, 0, -0.16)), V(c.x * 0.95, c.y * 0.95, -2.3), V(c.x, c.y, -2.32)], 0.01, 12));
+	}
+
+	// ---------- Around the engine: thruster clusters on the shield rim, the other two gimbal actuators ----------
+	for (let i = 0; i < 4; i++) {
+		const a = (i * Math.PI) / 2;
+		const radial = V(Math.cos(a), Math.sin(a), 0), tan = V(-Math.sin(a), Math.cos(a), 0);
+		const c = radial.clone().multiplyScalar(0.86).add(V(0, 0, -3.56));
+		aft(m.paint, box(0.12, 0.1, 0.16, basis(tan, radial, Z_AXIS, c)));
+		aft(m.kapton, box(0.125, 0.02, 0.165, basis(tan, radial, Z_AXIS, c.clone().addScaledVector(radial, 0.045))));
+		for (const [dir, d] of [[tan, 0.08], [tan.clone().negate(), 0.08], [Z_AXIS.clone().negate(), 0.1]] as const) {
+			const bell = new THREE.CylinderGeometry(0.01, 0.022, 0.035, 12, 1, true);
+			bell.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y_AXIS, dir));
+			const q = c.clone().addScaledVector(dir, d);
+			aft(m.gunmetal, bell.translate(q.x, q.y, q.z));
+		}
+	}
+	for (const a of [Math.PI, Math.PI * 1.5]) {
+		const p = V(Math.cos(a) * 0.36, Math.sin(a) * 0.36, -4.36), q = V(Math.cos(a) * 0.5, Math.sin(a) * 0.5, -4.95);
+		aft(m.metal, strut(p, q, 0.025, 10));
+		aft(m.gunmetal, strut(p, p.clone().lerp(q, 0.45), 0.04, 12));
+	}
+	aft(m.gunmetal, hoop(0.27, 0.03, -4.63, 48));
+
+	// ---------- Habitat cross: a node on the spine with four crew cabins radiating from it ----------
+	const HZ = -2.25;
+	const cabinPlates = [
+		['CREW QUARTERS', 'DECK B  ·  PORT', '#c8662e'],
+		['GALLEY', 'DECK B  ·  DORSAL', '#3f8a5a'],
+		['MED BAY', 'DECK B  ·  STARBOARD', '#b03a3a'],
+		['HYDROPONICS', 'DECK B  ·  VENTRAL', '#6c9a3a'],
+	].map(([title, sub, stripe], i) => plate({ seed: 140 + i * 5, aspect: (Math.PI * 2 * 0.3) / 1.2, title, sub, stripe }));
+	hull.add(m.node, tube(0.52, 0.52, HZ - 0.42, HZ + 0.42, 48));
+	hull.add(m.gold, tube(0.53, 0.53, HZ - 0.2, HZ + 0.2, 48));
+	for (const dz of [-0.42, 0.42]) hull.add(m.metal, hoop(0.53, 0.03, HZ + dz, 64));
+	hull.add(m.dark, tube(0.36, 0.52, HZ - 0.46, HZ - 0.42, 48));
+	hull.add(m.dark, tube(0.52, 0.36, HZ + 0.42, HZ + 0.46, 48));
+	for (let i = 0; i < 4; i++) {
+		const a = (i * Math.PI) / 2;
+		const out = V(Math.cos(a), Math.sin(a), 0), side = V(Math.sin(a), -Math.cos(a), 0);
+		// The cabin's own (right-handed) frame: y along the cabin, outward; z toward the bow
+		const frame = basis(side, out, Z_AXIS.clone(), V(0, 0, HZ));
+		const C: Add = (mat, g) => hull.add(mat, g, frame);
+		const r = 0.3, y0 = 0.52, y1 = 1.78;
+		C(m.metal, new THREE.CylinderGeometry(0.2, 0.2, 0.12, 32).translate(0, y0 + 0.06, 0));
+		C(m.gunmetal, new THREE.TorusGeometry(0.21, 0.02, 8, 32).rotateX(Math.PI / 2).translate(0, y0 + 0.11, 0));
+		C(cabinPlates[i], new THREE.CylinderGeometry(r, r, y1 - y0 - 0.12, 48, 1, false, Math.PI).translate(0, (y0 + 0.12 + y1) / 2, 0));
+		for (const y of [y0 + 0.14, (y0 + y1) / 2 + 0.06, y1]) C(m.metal, new THREE.TorusGeometry(r + 0.004, 0.016, 8, 48).rotateX(Math.PI / 2).translate(0, y, 0));
+		C(m.paint, new THREE.SphereGeometry(r, 32, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.45, 1).translate(0, y1, 0));
+		C(m.gunmetal, new THREE.TorusGeometry(0.1, 0.018, 8, 24).rotateX(Math.PI / 2).translate(0, y1 + r * 0.45 - 0.01, 0));
+		// Two rows of lit windows, toward the bow and toward the stern
+		for (const fz of [-1, 1]) for (let w = 0; w < 4; w++) {
+			const y = y0 + 0.32 + w * 0.26;
+			C(m.gunmetal, new THREE.BoxGeometry(0.15, 0.17, 0.02).translate(0, y, fz * (r - 0.004)));
+			C(m.glass, new THREE.BoxGeometry(0.11, 0.13, 0.02).translate(0, y, fz * (r + 0.008)));
+			C(m.window, new THREE.BoxGeometry(0.095, 0.115, 0.02).translate(0, y, fz * (r + 0.002)));
+		}
+		// A radiator fin along one side, handrails, MMOD panels and hardware
+		C(m.radiator, new THREE.BoxGeometry(0.3, (y1 - y0) * 0.7, 0.014).rotateY(Math.PI / 2).translate(r + 0.17, (y0 + y1) / 2, 0));
+		C(m.gunmetal, new THREE.BoxGeometry(0.03, (y1 - y0) * 0.72, 0.03).translate(r + 0.02, (y0 + y1) / 2, 0));
+		for (const fz of [-1, 1]) handrail(C, m.rail, V(-0.14, y0 + 0.2, fz * Math.sqrt(r * r - 0.14 * 0.14)), V(-0.14, y1 - 0.06, fz * Math.sqrt(r * r - 0.14 * 0.14)), V(-0.4, 0, fz));
+		C(m.gold, new THREE.CylinderGeometry(r + 0.025, r + 0.025, 0.36, 24, 1, true, Math.PI * 1.15, Math.PI * 0.7).translate(0, y0 + 0.5, 0));
+		const cabM = frame.clone().multiply(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
+		greebles((mat, g) => hull.add(mat, g, cabM), hardware, {
+			r: r + 0.01, z0: y0 + 0.18, z1: y1 - 0.06, n: 38, seed: 160 + i, size: 0.7,
+			avoid: (t) => Math.abs(wrap(t - Math.PI / 2)) < 0.5 || Math.abs(wrap(t + Math.PI / 2)) < 0.5 || Math.abs(wrap(t)) < 0.4,
+		});
+		// A crew tube linking each cabin's outer end to the next, braced back to the node
+		const nb = (i + 1) % 4, b = (nb * Math.PI) / 2;
+		const pa = out.clone().multiplyScalar(1.3).add(V(0, 0, HZ - 0.36)), pb = V(Math.cos(b), Math.sin(b), 0).multiplyScalar(1.3).add(V(0, 0, HZ - 0.36));
+		hull.add(m.truss, strut(pa, pb, 0.022, 8));
+		hull.add(m.truss, strut(pa, out.clone().multiplyScalar(0.55).add(V(0, 0, HZ - 0.36)), 0.016, 6));
+	}
+
+	// ---------- Aft habitat ring: six more cabins on a counter-rotating rim ----------
+	const ring2 = new THREE.Group();
+	const R2 = 1.95, R2Z = -3.45, P2R = 0.27, P2L = 0.72;
+	ring2.position.z = R2Z;
+	model.add(ring2);
+	hull.add(m.paint, tube(0.52, 0.52, R2Z - 0.3, R2Z + 0.3, 48));
+	hull.add(m.metal, hoop(0.53, 0.035, R2Z - 0.3, 64));
+	hull.add(m.metal, hoop(0.53, 0.035, R2Z + 0.3, 64));
+	{
+		const r2 = new Parts();
+		const pod2Plate = plate({ seed: 177, aspect: (Math.PI * 2 * P2R) / P2L, stripe: '#3d8fb0', sub: 'HAB RING 2' });
+		r2.add(m.gold, tube(0.56, 0.56, -0.16, 0.16, 48));
+		for (const z of [-0.12, 0.12]) r2.add(m.truss, hoop(R2, 0.035, z, 160));
+		r2.add(m.kapton, hoop(R2 - 0.07, 0.018, 0, 160));
+		for (let i = 0; i < 60; i++) {
+			const a = (i / 60) * Math.PI * 2, b2 = ((i + 1) / 60) * Math.PI * 2;
+			const q = (ang: number, z: number) => V(Math.cos(ang) * R2, Math.sin(ang) * R2, z);
+			r2.add(m.truss, strut(q(a, -0.12), q(a, 0.12), 0.016));
+			r2.add(m.truss, strut(q(a, -0.12), q(b2, 0.12), 0.011));
+		}
+		for (let i = 0; i < 6; i++) {
+			const th = (i / 6) * Math.PI * 2 + Math.PI / 6;
+			const radial = V(Math.cos(th), Math.sin(th), 0), tangent = V(-Math.sin(th), Math.cos(th), 0);
+			const frame = basis(radial, tangent, Z_AXIS.clone(), radial.clone().multiplyScalar(R2));
+			const L2: Add = (mat, g) => r2.add(mat, g, frame);
+			r2.add(m.hullLong, strut(radial.clone().multiplyScalar(0.56), radial.clone().multiplyScalar(R2 - P2R + 0.02), 0.06, 16));
+			for (let k = 0; k <= 3; k++) {
+				const rr = 0.66 + (k / 3) * (R2 - P2R - 0.76);
+				r2.add(m.metal, new THREE.TorusGeometry(0.066, 0.01, 6, 20).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Z_AXIS, radial)), at(radial.x * rr, radial.y * rr, 0));
+			}
+			L2(pod2Plate, new THREE.CylinderGeometry(P2R, P2R, P2L, 40, 1, false, Math.PI));
+			for (const sg of [-1, 1]) {
+				const dome = new THREE.SphereGeometry(P2R, 32, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.4, 1);
+				if (sg < 0) dome.rotateX(Math.PI);
+				L2(m.paint, dome.translate(0, (sg * P2L) / 2, 0));
+				L2(m.metal, new THREE.TorusGeometry(P2R + 0.005, 0.02, 8, 40).rotateX(Math.PI / 2).translate(0, (sg * P2L) / 2, 0));
+			}
+			for (let w = 0; w < 3; w++) {
+				const y = (w - 1) * (P2L / 3.4);
+				L2(m.gunmetal, new THREE.BoxGeometry(0.12, 0.14, 0.02).translate(0, y, P2R - 0.004));
+				L2(m.window, new THREE.BoxGeometry(0.08, 0.1, 0.02).translate(0, y, P2R + 0.004));
+			}
+			L2(m.radiator, new THREE.BoxGeometry(0.24, P2L * 0.6, 0.012).translate(P2R + 0.14, 0, -0.04));
+			L2(m.gunmetal, new THREE.BoxGeometry(0.024, P2L * 0.62, 0.024).translate(P2R + 0.015, 0, -0.04));
+			const p2M = frame.clone().multiply(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
+			greebles((mat, g) => r2.add(mat, g, p2M), hardware, {
+				r: P2R + 0.01, z0: -P2L / 2 + 0.06, z1: P2L / 2 - 0.06, n: 24, seed: 190 + i, size: 0.55,
+				avoid: (t) => Math.abs(wrap(t + Math.PI / 2)) < 0.7 || Math.abs(wrap(t)) < 0.35,
+			});
+		}
+		r2.build(ring2);
+	}
+
 	hull.build(model);
 
 	// The inside of the bell glows from the plasma: bright at the throat, fading toward the exit
@@ -872,7 +1127,7 @@ export function buildVessel(bays: Bay[]): Vessel {
 		depthWrite: false,
 		blending: THREE.AdditiveBlending,
 	});
-	model.add(new THREE.Mesh(new THREE.LatheGeometry(bell.map((p) => new THREE.Vector2(p.x * 0.96, p.y)), 72).rotateX(Math.PI / 2).translate(0, 0, -4.6), glowMat));
+	model.add(new THREE.Mesh(new THREE.LatheGeometry(bell.map((p) => new THREE.Vector2(p.x * 0.96, p.y)), 72).rotateX(Math.PI / 2).translate(0, 0, -4.6 + AFT), glowMat));
 	const plumeMat = new THREE.MeshBasicMaterial({
 		map: gradientTexture([[0, 'rgba(190,210,255,0.9)'], [0.3, 'rgba(90,130,255,0.35)'], [1, 'rgba(0,0,0,0)']]),
 		color: new THREE.Color('#7fa6ff'),
@@ -882,10 +1137,10 @@ export function buildVessel(bays: Bay[]): Vessel {
 		depthWrite: false,
 		blending: THREE.AdditiveBlending,
 	});
-	model.add(new THREE.Mesh(tube(0.9, 0.5, -7.4, -5.55, 48), plumeMat));
+	model.add(new THREE.Mesh(tube(0.9, 0.5, -7.4 + AFT, -5.55 + AFT, 48), plumeMat));
 
 	// ---------- Floodlights: pools of light on the hull, only in the close-up ----------
-	const floods = ([[V(0, 1.1, 4.1), '#ffe2b8'], [V(0.7, 0.75, 2.9), '#ffe9c8'], [V(-0.55, 0.6, 0.2), '#ffe2b8'], [V(0.6, -0.7, -2.4), '#cfe0ff']] as const).map(([p, c]) => {
+	const floods = ([[V(0, 1.1, 4.1), '#ffe2b8'], [V(0.7, 0.75, 2.9), '#ffe9c8'], [V(-0.55, 0.6, 0.2), '#ffe2b8'], [V(0.6, -0.7, -2.4 + AFT), '#cfe0ff'], [V(-1.2, 1.1, -2.25), '#ffe9c8']] as const).map(([p, c]) => {
 		const l = new THREE.PointLight(c, 0, 0.3, 2);
 		l.position.copy(p);
 		model.add(l);
@@ -905,11 +1160,11 @@ export function buildVessel(bays: Bay[]): Vessel {
 	const port = lamp('#ff3b30', V(4.1, 0, wingZ), 0.16);
 	const starboard = lamp('#3dff7a', V(-4.1, 0, wingZ), 0.16);
 	const bowStrobe = lamp('#ffffff', V(0, 0, 5.72), 0.24);
-	const sternStrobe = lamp('#ffffff', V(0, 0.86, -3.46), 0.24);
+	const sternStrobe = lamp('#ffffff', V(0, 0.86, -3.46 + AFT), 0.24);
 	const floodLamps = floods.map((l) => lamp('#fff1d8', l.position, 0.07));
 	// The beacon keeps a constant size on screen, so the vessel can be found from across the system
 	const beacon = new THREE.Sprite(new THREE.SpriteMaterial({ map: dot, color: new THREE.Color('#ffb347').multiplyScalar(2.4), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, sizeAttenuation: false }));
-	beacon.position.set(0, 0.62 * SCALE, 3.0 * SCALE);
+	beacon.position.set(0, 0.62 * SCALE, (RING_Z + MID) * SCALE);
 	beacon.scale.setScalar(0.014);
 	root.add(beacon);
 
@@ -918,13 +1173,14 @@ export function buildVessel(bays: Bay[]): Vessel {
 		root,
 		ring,
 		sections,
-		reach: 5.9 * SCALE,
+		reach: 7.6 * SCALE,
 		materials: [...materials],
 		highlight(h: number, s: number) {
 			hover = h;
 			selected = s;
 		},
 		update(t: number, dt: number, near: number) {
+			ring2.rotation.z -= dt * 0.12;
 			const flash = (period: number, offset: number) => ((t + offset) % period < 0.07 ? 1 : 0);
 			(bowStrobe.material as THREE.SpriteMaterial).opacity = flash(1.6, 0);
 			(sternStrobe.material as THREE.SpriteMaterial).opacity = flash(1.6, 0.25);
