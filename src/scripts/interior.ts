@@ -495,6 +495,7 @@ export type Interior = {
 	hatch: { z: number; y: number; door: THREE.Group; wheel: THREE.Group }; // on a bulkhead facing +Z, centred on x = 0
 	revealAt: number; // metres
 	exposure: number;
+	environment?: number; // how much the surroundings reflect in its surfaces, for an interior meant to be dark
 	actions?: Action[]; // other things F does, besides opening the hatch
 	update?(dt: number, time: number): void; // each frame while inside
 	leave?(): void; // when the pilot leaves or the view closes
@@ -701,6 +702,7 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 			redraw: () => { if (!raf) render(); },
 		};
 		const it = builders[id](kit);
+		if (it.environment !== undefined) scene.environmentIntensity = it.environment;
 		world.scale.setScalar(it.scale);
 		// Lights fall off over world distance: stretch their reach with the interior and keep their brightness
 		if (it.scale !== 1) world.traverse((o) => {

@@ -8,11 +8,13 @@ import { commandModule } from '../data/command-module';
 import { court } from '../data/court';
 import { piano } from '../data/piano';
 import { arcade } from '../data/arcade';
+import { observatory } from '../data/observatory';
 import arcadeAtlas from '../assets/arcade/posters.jpg';
 
 const cabinPhotos = import.meta.glob<ImageMetadata>('../assets/cabin/*.jpg', { eager: true, import: 'default' });
 const courtPhotos = import.meta.glob<ImageMetadata>('../assets/court/*.jpg', { eager: true, import: 'default' });
 const pianoPhotos = import.meta.glob<ImageMetadata>('../assets/piano/*.jpg', { eager: true, import: 'default' });
+const observatoryPhotos = import.meta.glob<ImageMetadata>('../assets/observatory/*.jpg', { eager: true, import: 'default' });
 // Design D: Mission debrief. An unfamiliar star with four worlds, one per kind of experience: academic, professional,
 // engagement, and research. Picking a world flies the camera in; its sites are pinned to the surface, and picking
 // a site opens its debrief. A crewed vessel orbits out of the planets' plane: its command module holds my profile,
@@ -178,6 +180,14 @@ const courtData = {
 	})),
 	banners: court.banners,
 };
+// The astronomy bay's main screen (text in src/data/observatory.ts) and the target list beside it
+const observatoryData = {
+	panels: observatory.panels.map((p) => ({
+		...p,
+		photos: p.photos.map((ph) => ({ src: observatoryPhotos[`../assets/observatory/${ph.file}.jpg`].src, caption: ph.caption })),
+	})),
+	targets: observatory.targets,
+};
 // The piano bay's wall displays (text in src/data/piano.ts), its foyer poster, and the recording on its stage screen
 const pianoSrc = (file: string) => pianoPhotos[`../assets/piano/${file}.jpg`].src;
 const hallData = {
@@ -213,6 +223,7 @@ const views = [
 		// The command module only says whose profile it holds; the profile itself is inside
 		...(si === 0 && { name: profile.name, kind: `Personal profile, in the command module of ${vessel.name}`, points: [], link: null, enter: 'cabin', enterLabel: 'Enter the command module' }),
 		...(si === 1 && { kind: `${s.kind}. Aboard ${vessel.name}`, points: [], link: null, enter: 'court', enterLabel: 'Enter the court' }),
+		...(si === 2 && { kind: `${s.kind}. Aboard ${vessel.name}`, points: [], link: null, enter: 'observatory', enterLabel: 'Enter the observatory' }),
 		...(si === 3 && { kind: `${s.kind}. Aboard ${vessel.name}`, points: [], link: null, enter: 'hall', enterLabel: 'Enter the concert hall' }),
 		...(si === 5 && { kind: `${s.kind}. Aboard ${vessel.name}`, points: [], link: null, enter: 'arcade', enterLabel: 'Enter the arcade' }),
 	})),
@@ -525,6 +536,7 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 		<script type="application/json" id="view-data" set:html={JSON.stringify({ views, names: viewName })} />
 		<script type="application/json" id="cabin-data" set:html={JSON.stringify(cabinData)} />
 		<script type="application/json" id="court-data" set:html={JSON.stringify(courtData)} />
+		<script type="application/json" id="observatory-data" set:html={JSON.stringify(observatoryData)} />
 		<script type="application/json" id="hall-data" set:html={JSON.stringify(hallData)} />
 		<script type="application/json" id="arcade-data" set:html={JSON.stringify(arcadeData)} />
 
@@ -533,6 +545,7 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 			import { createInteriors, type Interiors } from '../scripts/interior';
 			import { commandModule, type CabinContent } from '../scripts/cabin';
 			import { courtBay, type CourtContent } from '../scripts/court';
+			import { observatoryBay, type ObservatoryContent } from '../scripts/observatory';
 			import { concertHall, type HallContent } from '../scripts/hall';
 			import { arcadeBay, type ArcadeContent } from '../scripts/arcade';
 
@@ -927,7 +940,7 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 
 			// ---------- Inside the vessel: walkable interiors, each its own first-person scene, built the first time it opens ----------
 			// Each hash names an interior and the section of the ship it is inside
-			const INTERIORS: Record<string, string> = { cabin: 'VSL-01', court: 'VSL-02', hall: 'VSL-04', arcade: 'VSL-06' };
+			const INTERIORS: Record<string, string> = { cabin: 'VSL-01', court: 'VSL-02', observatory: 'VSL-03', hall: 'VSL-04', arcade: 'VSL-06' };
 			const cabinHost = document.querySelector<HTMLElement>('.cabin')!;
 			let interiors: Interiors | null = null;
 			const leaveInterior = () => goCloseup(views.get(INTERIORS[interiors?.current || 'cabin'])!.back, true);
@@ -936,6 +949,7 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 				interiors ??= createInteriors(cabinHost, {
 					cabin: commandModule(data('cabin-data') as CabinContent),
 					court: courtBay(data('court-data') as CourtContent),
+					observatory: observatoryBay(data('observatory-data') as ObservatoryContent),
 					hall: concertHall(data('hall-data') as HallContent),
 					arcade: arcadeBay(data('arcade-data') as ArcadeContent),
 				}, { reduced, textures: `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}textures/`, onExit: leaveInterior });
