@@ -496,13 +496,15 @@ export type Interior = {
 	revealAt: number; // metres
 	exposure: number;
 	environment?: number; // how much the surroundings reflect in its surfaces, for an interior meant to be dark
+	readFrom?: number; // how far away, in metres, a display can be opened from; 18 unless its displays are read across a hall
 	actions?: Action[]; // other things F does, besides opening the hatch
 	update?(dt: number, time: number): void; // each frame while inside
 	leave?(): void; // when the pilot leaves or the view closes
 };
 
 // Something F does near a spot on the floor (x, z) while facing `look`; `label` finishes "Press F to …"
-export type Action = { x: number; z: number; reach: number; look: THREE.Vector3; label(): string; run(): void };
+// With `screen`, the display it works on: while that display is enlarged, F still does it and the enlarged copy follows.
+export type Action = { x: number; z: number; reach: number; look: THREE.Vector3; label(): string; run(): void; screen?: THREE.Object3D };
 
 export type Interiors = {
 	open(id: string): void;
@@ -537,6 +539,8 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 	const inspectEl = host.querySelector<HTMLElement>('.cabin-inspect')!;
 	const inspectCv = inspectEl.querySelector('canvas')!;
 	const inspectG = inspectCv.getContext('2d')!;
+	// The enlarged display's own F, when it has one: shown in the hint under it
+	const inspectAct = inspectEl.querySelector<HTMLElement>('.cabin-inspect-act');
 	const title = host.querySelector<HTMLElement>('.cabin-bar p')!;
 	let renderer: THREE.WebGLRenderer | null = null;
 	let composer: EffectComposer | null = null;
@@ -804,15 +808,21 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 	}
 
 	// ---------- Reading a display up close: the one under the reticle (or a tap) opens across the view ----------
-	const ray = new THREE.Raycaster(), center = new THREE.Vector2();
-	ray.far = 18;
+	const ray = new THREE.Raycaster(), center = new THREE.Vector2(); // its reach is set by each interior as it opens
 	let aimed: Screen | null = null;
-	let inspecting: { sc: Screen; slot: Slot | null; next: number } | null = null;
+	let inspecting: { sc: Screen; slot: Slot | null; next: number; act: Action | null } | null = null;
 	function aimAt(ndc: THREE.Vector2) {
 		if (!cur || !cur.meshes.length) return null;
 		ray.setFromCamera(ndc, camera);
 		const hit = ray.intersectObjects(cur.meshes, false)[0];
 		return hit ? cur.screens.find((sc) => sc.mesh === hit.object) ?? null : null;
+	}
+	function showInspectAct() {
+		if (!inspectAct) return;
+		const act = inspecting?.act;
+		inspectAct.hidden = !act;
+		const em = inspectAct.querySelector('em');
+		if (act && em) em.textContent = act.label();
 	}
 	function copyInspect() {
 		const src = inspecting?.sc.src;
@@ -828,10 +838,11 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 		if (!cur || !sc.src || leaving) return;
 		// A live display keeps drawing at its own pace while open
 		const shown = sc.mat.uniforms.uMap.value;
-		inspecting = { sc, slot: cur.slots.find((sl) => sl.live.tex === shown) ?? null, next: 0 };
+		inspecting = { sc, slot: cur.slots.find((sl) => sl.live.tex === shown) ?? null, next: 0, act: cur.it.actions?.find((a) => a.screen === sc.mesh) ?? null };
 		keys.clear();
 		vel.set(0, 0, 0);
 		copyInspect();
+		showInspectAct();
 		inspectEl.hidden = false;
 		void inspectEl.offsetWidth;
 		host.classList.add('inspecting');
@@ -920,7 +931,14 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 	};
 	addEventListener('keydown', (e) => {
 		if (!isOpen) return;
-		if (inspecting) { if (e.code !== 'Escape') e.preventDefault(); return; }
+		if (inspecting) {
+			// F runs the enlarged display's own action, if it has one, and the enlarged copy shows the result
+			if (e.code === 'KeyF' && inspecting.act) {
+				if (!e.repeat) { inspecting.act.run(); copyInspect(); showInspectAct(); }
+			}
+			if (e.code !== 'Escape') e.preventDefault();
+			return;
+		}
 		if (e.code === 'KeyF' && target) { if (!e.repeat) act(); e.preventDefault(); return; }
 		if (leaving || !(e.code in keyMap)) return;
 		keys.add(keyMap[e.code]);
@@ -1018,6 +1036,7 @@ export function createInteriors(host: HTMLElement, builders: Record<string, (kit
 			const { it } = l;
 			pass!.scene = l.scene;
 			renderer!.toneMappingExposure = it.exposure;
+			ray.far = (it.readFrom ?? 18) * it.scale;
 			title.replaceChildren(Object.assign(document.createElement('b'), { textContent: it.code }), ` ${it.name}`);
 			isOpen = true;
 			openedAt = performance.now();

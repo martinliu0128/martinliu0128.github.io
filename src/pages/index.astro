@@ -180,13 +180,12 @@ const courtData = {
 	})),
 	banners: court.banners,
 };
-// The astronomy bay's main screen (text in src/data/observatory.ts) and the target list beside it
+// The astronomy bay's main screen (text in src/data/observatory.ts), the target list beside it and the posters
+const observatorySrc = (file: string) => observatoryPhotos[`../assets/observatory/${file}.jpg`].src;
 const observatoryData = {
-	panels: observatory.panels.map((p) => ({
-		...p,
-		photos: p.photos.map((ph) => ({ src: observatoryPhotos[`../assets/observatory/${ph.file}.jpg`].src, caption: ph.caption })),
-	})),
+	panels: observatory.panels.map((p) => ({ ...p, photos: p.photos.map((ph) => ({ src: observatorySrc(ph.file), caption: ph.caption })) })),
 	targets: observatory.targets,
+	posters: observatory.posters.map(({ file, ...p }) => ({ ...p, src: file ? observatorySrc(file) : null })),
 };
 // The piano bay's wall displays (text in src/data/piano.ts), its foyer poster, and the recording on its stage screen
 const pianoSrc = (file: string) => pianoPhotos[`../assets/piano/${file}.jpg`].src;
@@ -300,6 +299,10 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 					sessionStorage.setItem('debrief-booted', '1');
 				}
 			} catch (e) {}
+			// A first-time visitor landing on the system gets the briefing on how to find their way around
+			try {
+				if (!localStorage.getItem('ml1-briefed') && !location.hash.slice(1)) document.documentElement.classList.add('briefing');
+			} catch (e) {}
 		</script>
 	</head>
 	<body>
@@ -310,6 +313,38 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 				<circle class="core" cx="30" cy="30" r="5" />
 			</svg>
 			<p>Initializing debrief</p>
+		</div>
+
+		<div class="brief" role="dialog" aria-modal="true" aria-labelledby="brief-title">
+			<div class="brief-card">
+				<p class="brief-eyebrow"><i aria-hidden="true"></i>ML-1 <span class="sep">//</span> Ship's log <span class="sep">//</span> Entry 001</p>
+				<h2 id="brief-title">Welcome aboard</h2>
+				<p class="brief-story">You're aboard <b>ML-1</b>, Martin Liu's survey vessel, holding orbit around a star in a galaxy far from home. The crew has just come back from its last run of missions in this system, and every debrief is on file.</p>
+				<p class="brief-story">Each world out there is one part of Martin's record so far: academic, professional, engagement and research. The ship is where Martin lives between missions.</p>
+				<ol class="brief-steps">
+					<li>
+						<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="7" /><ellipse cx="16" cy="16" rx="14" ry="5" transform="rotate(-20 16 16)" /></svg>
+						<div><b>Click a planet</b><span>Fly in and read its mission debriefs. Each marked site on its surface is one experience: a course, an internship, a research project.</span></div>
+					</li>
+					<li>
+						<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 16h24M9 11v10M23 11v10M14 13h4v6h-4z" /><path d="M28 16l-3-3v6z" /></svg>
+						<div><b>Click the ship</b><span>Our shelter. The command module holds Martin's profile, and each habitat bay something Martin loves. Go aboard and walk around.</span></div>
+					</li>
+					<li>
+						<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 5v22M5 16h22M16 5l-3 3M16 5l3 3M16 27l-3-3M16 27l3-3M5 16l3-3M5 16l3 3M27 16l-3-3M27 16l-3 3" /></svg>
+						<div><b>Look around</b><span>Drag to turn the view and scroll to zoom. <kbd>Esc</kbd> takes you back a step.</span></div>
+					</li>
+					<li>
+						<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="12" y="4" width="8" height="8" rx="1" /><rect x="3" y="14" width="8" height="8" rx="1" /><rect x="12" y="14" width="8" height="8" rx="1" /><rect x="21" y="14" width="8" height="8" rx="1" /></svg>
+						<div><b>On board</b><span><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> to walk, the mouse to look, <kbd>F</kbd> to use what's in front of you.</span></div>
+					</li>
+				</ol>
+				<p class="brief-plain">Prefer it plain? Debrief, Sorties and Experience in the top bar list everything as text.</p>
+				<div class="brief-foot">
+					<p class="brief-status" aria-live="polite"><span class="brief-gauge" aria-hidden="true"></span><span class="brief-status-text">Plotting the system</span></p>
+					<button class="brief-go cta" type="button" disabled><span class="cta-gauge" aria-hidden="true"></span>Begin the debrief</button>
+				</div>
+			</div>
 		</div>
 
 		<div class="chassis">
@@ -350,6 +385,7 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 							<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5V1h4M11 1h4v4M15 11v4h-4M5 15H1v-4" /></svg>
 							Full view
 						</button>
+						<button class="brief-open" type="button">How to explore</button>
 						<div class="marks" aria-hidden="true"></div>
 						<div class="hud tl" aria-hidden="true">
 							<p class="hud-title">Tactical plot</p>
@@ -515,7 +551,7 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 			<span class="cabin-aim" aria-hidden="true"><span class="keys">Click to enlarge</span><span class="touch">Tap to enlarge</span></span>
 			<div class="cabin-inspect" hidden>
 				<canvas aria-label="The display, enlarged"></canvas>
-				<p class="cabin-inspect-hint"><span class="keys"><kbd>Esc</kbd> or click to return</span><span class="touch">Tap to return</span></p>
+				<p class="cabin-inspect-hint"><span class="cabin-inspect-act keys" hidden><kbd>F</kbd> to <em></em><span class="sep">·</span></span><span class="keys"><kbd>Esc</kbd> or click to return</span><span class="touch">Tap to return</span></p>
 			</div>
 			<header class="cabin-bar">
 				<p><b>VSL-01</b> Command module, aboard ML-1</p>
@@ -595,12 +631,12 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 			let readyTimer = 0;
 
 			// Wide screens hold the body left of center with the callouts beside it; narrow ones put it on top and stack the text below.
-			// The vessel sits in the right half instead, clear of the title, with its text on the left.
+			// The vessel sits in the right half instead, as large as it can be while staying clear of the title on the left.
 			function cuFrame(): CloseFrame {
 				const w = plot.clientWidth, h = plot.clientHeight;
 				const narrow = w < 760 || w / h < 0.95, ship = cu.classList.contains('vessel');
 				const f = narrow ? { x: 0.5, y: 0.32, r: Math.min(w * 0.34, h * 0.17) }
-					: ship ? { x: 0.67, y: 0.55, r: Math.min(h * 0.36, w * 0.22) }
+					: ship ? { x: 0.68, y: 0.55, r: Math.min(h * 0.46, w * 0.25) }
 					: { x: 0.29, y: 0.6, r: Math.min(h * 0.34, w * 0.21) };
 				cu.classList.toggle('narrow', narrow);
 				cu.style.setProperty('--cu-col', ship && !narrow ? '28px' : `${Math.round(f.x * w + f.r + 96)}px`);
@@ -999,6 +1035,42 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 			// Let the first-visit boot finish, then drop its long delays so later openings use their own timing
 			if (root.classList.contains('boot')) setTimeout(() => root.classList.remove('boot'), 2800);
 
+			// ---------- The briefing: shown once on a first visit, and again from "How to explore" ----------
+			// Its gauge runs while the system plots behind it; once it is full, Begin (or Enter, or Escape) closes it.
+			const brief = document.querySelector<HTMLElement>('.brief')!;
+			const briefGo = brief.querySelector<HTMLButtonElement>('.brief-go')!;
+			const briefStatus = brief.querySelector('.brief-status-text')!;
+			const briefReady = () => {
+				brief.classList.add('ready');
+				briefStatus.textContent = 'System plotted';
+				briefGo.disabled = false;
+				briefGo.focus({ preventScroll: true });
+			};
+			function openBrief(wait: boolean) {
+				brief.classList.remove('ready');
+				briefGo.disabled = true;
+				briefStatus.textContent = 'Plotting the system';
+				root.classList.remove('brief-out');
+				root.classList.add('briefing');
+				if (wait && !reduced) setTimeout(briefReady, 1700);
+				else briefReady();
+			}
+			function closeBrief() {
+				if (!root.classList.contains('briefing') || briefGo.disabled) return;
+				try { localStorage.setItem('ml1-briefed', '1'); } catch { /* private mode: it shows again next time */ }
+				if (reduced) { root.classList.remove('briefing'); return; }
+				root.classList.add('brief-out');
+				setTimeout(() => root.classList.remove('briefing', 'brief-out'), 450);
+			}
+			briefGo.addEventListener('click', closeBrief);
+			plot.querySelector('.brief-open')!.addEventListener('click', () => openBrief(false));
+			// While it is open it takes Escape and Enter for itself, so they don't also step the plot back
+			addEventListener('keydown', (e) => {
+				if (!root.classList.contains('briefing')) return;
+				if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); closeBrief(); }
+			}, true);
+			if (root.classList.contains('briefing')) openBrief(true);
+
 			// ---------- Clock and tab state ----------
 			const clock = document.querySelector('.clock')!;
 			const tick = () => { clock.textContent = new Date().toISOString().slice(11, 19) + ' UTC'; };
@@ -1239,6 +1311,95 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 			@keyframes blink { 50% { opacity: 0.2; } }
 			@keyframes loader-out { to { opacity: 0; visibility: hidden; } }
 
+			/* ---------- First-visit briefing (only when html.briefing): the story, and how to find your way ---------- */
+			.brief { display: none; }
+			.briefing .loader { display: none; }
+			.briefing .brief {
+				position: fixed;
+				inset: 0;
+				z-index: 20;
+				display: grid;
+				place-items: center;
+				padding: 16px;
+				overflow-y: auto;
+				background: radial-gradient(ellipse at 50% 40%, rgba(20, 28, 48, 0.55), rgba(8, 11, 20, 0.88));
+				backdrop-filter: blur(3px);
+				animation: brief-in 0.5s ease both;
+			}
+			.brief-out .brief { animation: brief-leave 0.45s ease forwards; }
+			.brief-card {
+				position: relative;
+				width: min(640px, 100%);
+				padding: 30px 34px 26px;
+				background: linear-gradient(180deg, rgba(40, 54, 82, 0.96), rgba(23, 32, 52, 0.97));
+				border: 1px solid rgba(196, 212, 238, 0.28);
+				box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+				animation: brief-card-in 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) 0.1s both;
+			}
+			/* Corner brackets, as on the ship's displays */
+			.brief-card::before, .brief-card::after {
+				content: '';
+				position: absolute;
+				width: 18px; height: 18px;
+				border: 2px solid var(--ice);
+				pointer-events: none;
+			}
+			.brief-card::before { top: -6px; left: -6px; border-right: 0; border-bottom: 0; }
+			.brief-card::after { bottom: -6px; right: -6px; border-left: 0; border-top: 0; }
+			.brief-eyebrow { display: flex; align-items: center; gap: 8px; margin: 0; font: 400 0.64rem/1.4 var(--display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+			.brief-eyebrow i { width: 8px; height: 8px; background: var(--amber); animation: blink 0.9s steps(1) infinite; }
+			.brief-eyebrow .sep { color: rgba(147, 163, 192, 0.5); }
+			.brief h2 { margin: 12px 0 14px; font: 400 clamp(1.5rem, 4vw, 2.1rem)/1.1 var(--display); letter-spacing: 0.04em; color: #fff; }
+			.brief-story { margin: 0 0 10px; font-size: 1.02rem; line-height: 1.55; color: var(--ice); }
+			.brief-story + .brief-story { color: var(--dim); }
+			.brief-story b { color: var(--amber); font-weight: 600; }
+			.brief-steps { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 2px; border-top: 1px solid var(--line); }
+			.brief-steps li { display: grid; grid-template-columns: 38px 1fr; gap: 14px; align-items: start; padding: 12px 0; border-bottom: 1px solid var(--line); }
+			.brief-steps svg { width: 34px; height: 34px; fill: none; stroke: var(--amber); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+			.brief-steps b { display: block; font: 600 1.02rem/1.2 var(--data); letter-spacing: 0.06em; text-transform: uppercase; color: #fff; }
+			.brief-steps span { display: block; margin-top: 3px; font-size: 0.95rem; line-height: 1.45; color: var(--dim); }
+			.brief-plain { margin: 14px 0 0; font: 500 0.88rem/1.4 var(--data); letter-spacing: 0.03em; color: var(--dim); }
+			.brief-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; margin-top: 18px; }
+			.brief-status { display: flex; align-items: center; gap: 10px; margin: 0; font: 600 0.82rem/1 var(--data); letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+			.brief-gauge { position: relative; width: 90px; height: 6px; border: 1px solid var(--plate); background: var(--hull-lo); overflow: hidden; }
+			.brief-gauge::before { content: ''; position: absolute; inset: 1px auto 1px 1px; width: 0; background: var(--amber); animation: brief-fill 1.6s ease-out forwards; }
+			.brief.ready .brief-status { color: var(--amber); }
+			.brief.ready .brief-gauge::before { width: calc(100% - 2px); animation: none; }
+			.brief-go { margin: 0; padding: 10px 4px; font-size: 1.05rem; background: none; border: 0; cursor: pointer; }
+			.brief-go:disabled { opacity: 0.4; cursor: default; }
+			.brief-go:disabled .cta-gauge::before { width: 7px; background: var(--plate-hi); }
+			@keyframes brief-in { from { opacity: 0; } }
+			@keyframes brief-leave { to { opacity: 0; visibility: hidden; } }
+			@keyframes brief-card-in { from { opacity: 0; translate: 0 18px; clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+			@keyframes brief-fill { to { width: calc(100% - 2px); } }
+			@media (prefers-reduced-motion: reduce) {
+				.briefing .brief, .brief-card, .brief-gauge::before, .brief-eyebrow i { animation: none; }
+			}
+			@media (max-width: 560px) {
+				.brief-card { padding: 24px 20px 20px; }
+				.brief-steps li { grid-template-columns: 30px 1fr; gap: 10px; }
+				.brief-steps svg { width: 28px; height: 28px; }
+			}
+			/* On the full-screen system, a way back to the briefing */
+			.brief-open { display: none; }
+			.immersive .brief-open {
+				display: block;
+				position: absolute;
+				left: 22px; bottom: 18px;
+				z-index: 2;
+				padding: 7px 11px;
+				font: 400 0.6rem/1.2 var(--display);
+				letter-spacing: 0.12em;
+				text-transform: uppercase;
+				color: var(--dim);
+				background: rgba(20, 28, 48, 0.6);
+				border: 1px solid var(--line);
+				cursor: pointer;
+				transition: color 0.15s, border-color 0.15s, opacity 0.4s;
+			}
+			.immersive .brief-open:hover, .immersive .brief-open:focus-visible { color: #fff; border-color: var(--amber); }
+			.cu-on .brief-open { opacity: 0; visibility: hidden; }
+
 			.boot [data-boot] { animation: power-on 0.55s cubic-bezier(0.6, 0, 0.2, 1) backwards; animation-delay: calc(1.3s + var(--i) * 0.13s); }
 			.boot .viewport[data-boot] { animation-name: open-viewport; animation-duration: 0.7s; }
 			@keyframes power-on {
@@ -1430,6 +1591,9 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 			.cabin-inspect-hint { font: 500 0.85rem/1.2 var(--data); letter-spacing: 0.06em; color: var(--dim); }
 			.cabin-inspect-hint kbd { padding: 1px 6px; margin-right: 4px; font: 600 0.75rem/1.2 var(--data); color: var(--ice); border: 1px solid rgba(228, 236, 247, 0.3); }
 			.cabin-inspect-hint .touch { display: none; }
+			.cabin-inspect-act[hidden] { display: none !important; }
+			.cabin-inspect-act em { font-style: normal; color: var(--ice); }
+			.cabin-inspect-act .sep { margin: 0 10px; color: rgba(147, 163, 192, 0.5); }
 			.cabin.inspecting .cabin-capture, .cabin.inspecting .cabin-prompt, .cabin.inspecting .cabin-reticle, .cabin.inspecting .cabin-aim, .cabin.inspecting .cabin-help, .cabin.inspecting .cabin-pad { visibility: hidden; }
 			.cabin-bar { position: absolute; inset: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 28px 40px; background: linear-gradient(rgba(3, 5, 10, 0.7), transparent); pointer-events: none; }
 			.cabin-bar > * { pointer-events: auto; }

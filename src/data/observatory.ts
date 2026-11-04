@@ -1,6 +1,7 @@
 // What the observatory's main screen shows, from materials/astronomy module content.docx. One entry per page, in the
 // order F turns through them; `photos` name files in src/assets/observatory, captions are short labels.
-// `targets` fill the catalogue display beside the screen.
+// `targets` fill the catalogue display beside the screen; `posters` hang on the wall under the gallery, each with a
+// photo from src/assets/observatory or, with `file` null, a diagram.
 export const observatory = {
 	panels: [
 		{
@@ -60,5 +61,11 @@ export const observatory = {
 		{ name: 'Moon', kind: 'Satellite', note: 'High school stargazing sessions' },
 		{ name: 'McCormick', kind: 'Observatory', note: 'University of Virginia' },
 		{ name: 'Spacetime', kind: 'Relativity', note: 'Sixth grade, the book that started it' },
+	],
+	posters: [
+		{ title: 'Dark matter in Milky Way-like galaxies', sub: 'DREAMS CDM suite  ·  The Astrophysical Journal', file: 'dark-matter', body: 'Projections of the dark matter density of Milky Way-mass halos, each row varying one parameter of the simulations.' },
+		{ title: 'M61 (NGC 4303)', sub: 'Spiral galaxy in Virgo  ·  Fan Mountain Observatory', file: 'm61', body: 'The first galaxy I photographed through an optical telescope.' },
+		{ title: 'The Hertzsprung–Russell diagram', sub: 'Stellar evolution', file: null, body: 'Stars by temperature and luminosity: the main sequence, the giants above it and the white dwarfs below.' },
+		{ title: 'The Milky Way over Kanas', sub: 'Kanas, Xinjiang  ·  zero light pollution', file: 'kanas-milky-way', body: 'Taken in middle school, on the night the sky stopped looking like a painting and took on depth.' },
 	],
 };

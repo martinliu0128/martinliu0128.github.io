@@ -1,9 +1,9 @@
-// The vessel's second habitat bay: an observatory inside a cylinder twenty-five metres across and thirty-eight long,
-// kept dark for the eyes. The hatch opens into a tunnel of baffle rings, like the inside of a telescope's tube, and out
-// onto the observatory floor. A great reflector stands on a stepped dais to the left, tracking the sky through a slit
-// in the hull, with a catwalk ring around its tube; a gallery of instruments runs along the right wall above a
-// spectrum frieze; an orrery turns in the floor; and the far bulkhead is one great screen, facing the tunnel, that
-// tells the pilot's astronomy story a page at a time, with telemetry and a target list either side of it.
+// The vessel's second habitat bay: a university observatory inside a cylinder twenty-five metres across and thirty-
+// eight long, its lights kept low. A plain corridor leads in from the hatch onto the dome floor. A great reflector
+// stands on a concrete dais to the left, tracking the sky through a slit in the hull, with a catwalk ring around its
+// tube; an instrument gallery runs along the right wall above a row of research posters; a brass orrery turns on a
+// pedestal; and the far bulkhead is one great screen, facing the entrance, that tells the pilot's astronomy story a
+// page at a time, with telemetry and a target list either side of it.
 // Units are metres: +Z runs from the entrance hatch to the screen, +Y is up.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
@@ -17,6 +17,7 @@ import {
 export type ObservatoryContent = {
 	panels: Panel[]; // the main screen's pages, in the order F turns through them
 	targets: { name: string; kind: string; note: string }[];
+	posters: { title: string; sub: string; src: string | null; body: string }[]; // on the wall under the gallery
 };
 
 const RH = 12.5; // hull radius
@@ -43,11 +44,12 @@ const CW = (() => {
 	return { x: TEL.x + Math.cos(AZ0) * h, y, z: TEL.z - Math.sin(AZ0) * h };
 })();
 const LADDER = { x: CW.x, z: CW.z + 2.65 };
-const ORR = { z: 6.2, r: 3.0 }; // the orrery in the floor
+const ORR = { z: 6.2, r: 1.3, rope: 2.1 }; // the orrery: its outermost orbit, and the ring of stanchions around it
 const CONS = { z: 13.2 }; // the console bank before the screen
 const SCREEN = { w: 19.2, h: 12, y: FL + 1.5 + 6, z: Z1 - 0.36 }; // as large as the bulkhead holds
 const SIDE = { x: 10.0, z: 15.2 }; // the tall displays on the walls either side of it
-const VIOLET = '#8a7dff', NIGHT = '#ff3b2f';
+const NIGHT = '#ff3b2f', SAFETY = '#d9a521'; // indicator red; the yellow of handrails and step edges
+const NAVY = '#232d4b', ORANGE = '#e57200', GOLD = '#b8964f'; // the department's colours, on its posters and signs
 const UP = new THREE.Vector3(0, 1, 0);
 
 // The telescope tracks its target: a slow drift in azimuth and altitude
@@ -77,137 +79,103 @@ const SKY: { name: string; a: number; z: number; stars: [number, number][]; line
 
 // ---------- Surfaces ----------
 
-// The hull's inner skin, as one sheet that is also its glow: near-black plating, a faint coordinate grid, painted
-// stars and the constellations. u runs around from +X through +Y, v from the entrance to the screen.
-function vaultSheet() {
-	const W = 4096, H = 2048;
+// The hull's inner skin, as one sheet: pale insulated panels on a steel frame, as inside a working dome, their seams
+// riveted. u runs around from +X through +Y, v from the entrance to the screen.
+function domeSheet() {
+	const W = 2048, H = 1024;
 	const { cv, g } = canvas(W, H);
 	const rand = rng(23);
-	g.fillStyle = '#04060b';
+	g.fillStyle = '#2a2d31';
 	g.fillRect(0, 0, W, H);
-	// Plating seams, a metre or two apart
-	const cols = 96, rows = 19;
+	const cols = 96, rows = 19, pw = W / cols, ph = H / rows;
 	for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
-		const k = rand() * 5;
-		g.fillStyle = `rgb(${6 + k},${8 + k},${14 + k})`;
-		g.fillRect((i * W) / cols + 2, (j * H) / rows + 2, W / cols - 4, H / rows - 4);
-	}
-	// Hour circles and declination lines
-	g.fillStyle = 'rgba(111,214,255,0.07)';
-	for (let i = 0; i < 48; i++) g.fillRect((i * W) / 48, 0, 2, H);
-	for (let j = 1; j < 12; j++) g.fillRect(0, (j * H) / 12, W, 2);
-	// Painted stars
-	for (let n = 0; n < 5200; n++) {
-		const b = rand();
-		g.fillStyle = `rgba(${200 + rand() * 55},${210 + rand() * 45},255,${0.08 + b * b * 0.5})`;
-		const s = b > 0.96 ? 3 : 2;
-		g.fillRect(rand() * W, rand() * H, s, s);
-	}
-	// The constellations, about a metre and a half to a unit. The sheet's rows run toward the entrance as seen from
-	// inside, so the figures and their names are drawn flipped top to bottom to read the right way round.
-	const unit = 84;
-	for (const c of SKY) {
-		const ox = (c.a / (Math.PI * 2)) * W, oy = H - ((c.z - Z0) / (Z1 - Z0)) * H;
-		const P = ([x, y]: [number, number]) => [ox + x * unit, oy - y * unit];
-		g.strokeStyle = 'rgba(111,214,255,0.32)';
-		g.lineWidth = 2.5;
-		for (const [a, b] of c.lines) {
-			const [x0, y0] = P(c.stars[a]), [x1, y1] = P(c.stars[b]);
-			g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
-		}
-		for (const s of c.stars) {
-			const [x, y] = P(s);
-			const gr = g.createRadialGradient(x, y, 0, x, y, 14);
-			gr.addColorStop(0, 'rgba(255,255,255,0.95)'); gr.addColorStop(0.3, 'rgba(210,225,255,0.45)'); gr.addColorStop(1, 'rgba(210,225,255,0)');
-			g.fillStyle = gr;
-			g.fillRect(x - 14, y - 14, 28, 28);
-		}
-		const [lx, ly] = P(c.stars[0]);
-		g.save();
-		g.translate(lx + 18, ly + 22);
-		g.scale(1, -1);
-		g.font = `600 30px ${COND}`;
-		g.fillStyle = 'rgba(147,163,192,0.55)';
-		g.fillText(c.name.toUpperCase(), 0, 0);
-		g.restore();
+		const k = (rand() - 0.5) * 8, x = i * pw, y = j * ph;
+		g.fillStyle = `rgb(${64 + k},${67 + k},${72 + k})`; // painted dark, so the dome scatters no stray light
+		g.fillRect(x + 1.5, y + 1.5, pw - 3, ph - 3);
+		// A faint sheen across each panel, and its rivets
+		const sh = g.createLinearGradient(x, y, x + pw, y + ph);
+		sh.addColorStop(0, 'rgba(255,255,255,0.05)'); sh.addColorStop(1, 'rgba(0,0,0,0.06)');
+		g.fillStyle = sh;
+		g.fillRect(x + 1.5, y + 1.5, pw - 3, ph - 3);
+		g.fillStyle = 'rgba(90,95,102,0.6)';
+		for (let r = 6; r < ph - 4; r += 9) { g.fillRect(x + 3, y + r, 1.5, 1.5); g.fillRect(x + pw - 4.5, y + r, 1.5, 1.5); }
 	}
 	const t = tex(cv);
 	t.wrapS = THREE.RepeatWrapping;
 	return t;
 }
 
-// The floor, which is also its own glow: graphite tiles, a grating down the tunnel, red guide lines along the
-// walkways, a compass rose around the dais and a scale around the orrery. Canvas x follows world x; canvas y runs from
-// the entrance (top) to the screen.
+// The floor: grey raised-floor tiles, a band of yellow and black around the telescope's dais with the azimuth marked
+// in white paint outside it, a round carpet under the orrery, and the bay's name by the entrance. Canvas x follows
+// world x; canvas y runs from the entrance (top) to the screen.
 function floorSheet() {
 	const L = Z1 - Z0, W = 2048, H = Math.round((W * L) / (2 * HW));
 	const { cv, g } = canvas(W, H);
 	const s = W / (2 * HW);
 	const X = (x: number) => (x + HW) * s, Z = (z: number) => (z - Z0) * s;
 	const rand = rng(31);
-	g.fillStyle = '#07090d';
+	g.fillStyle = '#1e2024';
 	g.fillRect(0, 0, W, H);
-	const tile = 1.2 * s;
+	const tile = 0.6 * s;
 	for (let x = 0; x < W; x += tile) for (let y = 0; y < H; y += tile) {
-		const k = rand() * 6;
-		g.fillStyle = `rgb(${12 + k},${14 + k},${19 + k})`;
-		g.fillRect(x + 2, y + 2, tile - 4, tile - 4);
+		const k = (rand() - 0.5) * 6;
+		g.fillStyle = `rgb(${52 + k},${55 + k},${60 + k})`;
+		g.fillRect(x + 1.5, y + 1.5, tile - 3, tile - 3);
 	}
-	// The tunnel's grating
-	g.fillStyle = '#0d1016';
-	g.fillRect(X(-TW), 0, X(TW) - X(-TW), Z(TUN.z1));
-	g.fillStyle = 'rgba(0,0,0,0.55)';
-	for (let y = 0; y < Z(TUN.z1); y += 0.08 * s) g.fillRect(X(-TW), y, X(TW) - X(-TW), 0.03 * s);
-	// Red guide lines: the tunnel, then the runner up the middle to the orrery, then out to the consoles
-	const red = (x0: number, z0: number, x1: number, z1: number, dash = 0) => {
-		g.strokeStyle = 'rgba(255,59,47,0.85)';
-		g.lineWidth = 0.05 * s;
-		g.setLineDash(dash ? [dash * s, dash * 0.6 * s] : []);
-		g.beginPath(); g.moveTo(X(x0), Z(z0)); g.lineTo(X(x1), Z(z1)); g.stroke();
-	};
-	for (const e of [-1, 1]) {
-		red(e * (TW - 0.18), Z0, e * (TW - 0.18), TUN.z1);
-		red(e * 1.2, TUN.z1, e * 1.2, ORR.z - ORR.r - 0.7, 0.4);
-		red(e * 1.2, ORR.z + ORR.r + 0.7, e * 1.2, CONS.z - 1.6, 0.4);
+	// Safety band around the dais
+	const cx = X(TEL.x), cy = Z(TEL.z), r0 = (TEL.steps[0] + 0.08) * s, bw = 0.14 * s;
+	g.save();
+	g.beginPath(); g.arc(cx, cy, r0 + bw, 0, Math.PI * 2); g.arc(cx, cy, r0, 0, Math.PI * 2, true); g.clip();
+	g.fillStyle = '#d9a521';
+	g.fillRect(cx - r0 - bw, cy - r0 - bw, (r0 + bw) * 2, (r0 + bw) * 2);
+	g.fillStyle = '#16171a';
+	for (let i = 0; i < 120; i++) {
+		const a = (i / 120) * Math.PI * 2;
+		g.beginPath();
+		g.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+		g.lineTo(cx + Math.cos(a + 0.02) * (r0 + bw), cy + Math.sin(a + 0.02) * (r0 + bw));
+		g.lineTo(cx + Math.cos(a + 0.045) * (r0 + bw), cy + Math.sin(a + 0.045) * (r0 + bw));
+		g.lineTo(cx + Math.cos(a + 0.025) * r0, cy + Math.sin(a + 0.025) * r0);
+		g.fill();
 	}
-	g.setLineDash([]);
-	// The compass rose around the dais: a tick every five degrees, the cardinal points lettered
-	const cx = X(TEL.x), cy = Z(TEL.z), r0 = (TEL.steps[0] + 0.15) * s;
-	g.strokeStyle = 'rgba(242,177,59,0.5)';
-	g.lineWidth = 3;
-	g.beginPath(); g.arc(cx, cy, r0 + 0.55 * s, 0, Math.PI * 2); g.stroke();
+	g.restore();
+	// Azimuth in white paint: a tick every five degrees, a number every thirty
+	const ra = r0 + bw + 0.12 * s;
+	g.strokeStyle = 'rgba(226,228,230,0.55)';
+	g.lineWidth = 2;
 	for (let i = 0; i < 72; i++) {
-		const a = (i / 72) * Math.PI * 2, len = (i % 6 ? 0.18 : 0.4) * s;
-		g.strokeStyle = i % 18 ? 'rgba(242,177,59,0.45)' : 'rgba(255,59,47,0.9)';
-		g.beginPath(); g.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0); g.lineTo(cx + Math.cos(a) * (r0 + len), cy + Math.sin(a) * (r0 + len)); g.stroke();
+		const a = (i / 72) * Math.PI * 2, len = (i % 6 ? 0.12 : 0.26) * s;
+		g.beginPath(); g.moveTo(cx + Math.cos(a) * ra, cy + Math.sin(a) * ra); g.lineTo(cx + Math.cos(a) * (ra + len), cy + Math.sin(a) * (ra + len)); g.stroke();
 	}
 	g.textAlign = 'center';
 	g.textBaseline = 'middle';
-	g.font = `600 ${Math.round(0.36 * s)}px ${COND}`;
-	g.fillStyle = 'rgba(255,59,47,0.9)';
-	for (const [label, a] of [['N', -Math.PI / 2], ['E', 0], ['S', Math.PI / 2], ['W', Math.PI]] as const) {
-		const r = r0 + 0.9 * s;
-		g.fillText(label, cx + Math.cos(a) * r, cy + Math.sin(a) * r);
-	}
-	// The orrery's scale: a ring of the zodiac's twelve divisions
-	const ox = X(0), oy = Z(ORR.z), ro = (ORR.r + 0.45) * s;
-	g.strokeStyle = 'rgba(138,125,255,0.55)';
-	g.lineWidth = 3;
-	for (const r of [ro, ro + 0.4 * s]) { g.beginPath(); g.arc(ox, oy, r, 0, Math.PI * 2); g.stroke(); }
+	g.font = `600 ${Math.round(0.2 * s)}px ${COND}`;
+	g.fillStyle = 'rgba(226,228,230,0.6)';
 	for (let i = 0; i < 12; i++) {
-		const a = (i / 12) * Math.PI * 2;
-		g.beginPath(); g.moveTo(ox + Math.cos(a) * ro, oy + Math.sin(a) * ro); g.lineTo(ox + Math.cos(a) * (ro + 0.4 * s), oy + Math.sin(a) * (ro + 0.4 * s)); g.stroke();
+		// Turned to read the right way up walking in from the entrance
+		const a = (i / 12) * Math.PI * 2 - Math.PI / 2, r = ra + 0.45 * s;
+		g.save();
+		g.translate(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+		g.rotate(Math.PI);
+		g.fillText(String(i * 30).padStart(3, '0'), 0, 0);
+		g.restore();
 	}
-	// The bay's name, reading the right way up walking in from the tunnel
+	// The carpet under the orrery, navy with a gold border
+	const ox = X(0), oy = Z(ORR.z), rc = (ORR.rope + 0.35) * s;
+	g.fillStyle = '#1f2840';
+	g.beginPath(); g.arc(ox, oy, rc, 0, Math.PI * 2); g.fill();
+	g.strokeStyle = 'rgba(184,150,79,0.8)';
+	g.lineWidth = 0.05 * s;
+	g.beginPath(); g.arc(ox, oy, rc - 0.12 * s, 0, Math.PI * 2); g.stroke();
+	// The bay's name, reading the right way up walking in from the entrance
 	g.save();
-	g.translate(X(0), Z(-11.2));
+	g.translate(X(0), Z(-11.4));
 	g.rotate(Math.PI);
-	g.fillStyle = 'rgba(228,236,247,0.75)';
-	g.font = `400 ${Math.round(0.42 * s)}px ${DISPLAY}`;
+	g.fillStyle = 'rgba(226,228,230,0.55)';
+	g.font = `400 ${Math.round(0.36 * s)}px ${DISPLAY}`;
 	g.fillText('THE OBSERVATORY', 0, 0);
-	g.fillStyle = 'rgba(255,59,47,0.75)';
-	g.font = `600 ${Math.round(0.26 * s)}px ${COND}`;
-	g.fillText('HABITAT BAY 2  ·  ML-1  ·  KEEP LIGHTS LOW', 0, 0.5 * s);
+	g.font = `600 ${Math.round(0.2 * s)}px ${COND}`;
+	g.fillText('HABITAT BAY 2  ·  ML-1  ·  PLEASE KEEP LIGHTS LOW DURING OBSERVATIONS', 0, 0.42 * s);
 	g.restore();
 	return tex(cv);
 }
@@ -254,29 +222,95 @@ function rackSheet() {
 	return tex(cv);
 }
 
-// The bay's name, painted on a dark wall
+// The bay's name, painted on a wall
 function nameSign(text: string, sub: string) {
 	const { cv, g } = canvas(2048, 512);
 	g.textAlign = 'center';
-	g.fillStyle = '#dfe4ff';
+	g.fillStyle = '#e6e8eb';
 	g.font = `400 190px ${DISPLAY}`;
 	g.fillText(text, 1024, 250);
-	g.fillStyle = VIOLET;
+	g.fillStyle = GOLD;
 	g.fillRect(744, 298, 560, 8);
-	g.fillStyle = 'rgba(223,228,255,0.8)';
+	g.fillStyle = 'rgba(230,232,235,0.8)';
 	g.font = `600 80px ${COND}`;
 	g.fillText(sub, 1024, 420);
 	return tex(cv);
 }
 
-// A soft glow for sprites: the orrery's sun, the lamps
-function glowDot(inner: string, outer: string) {
-	const { cv, g } = canvas(128, 128);
-	const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-	gr.addColorStop(0, inner); gr.addColorStop(0.25, outer); gr.addColorStop(1, 'rgba(0,0,0,0)');
-	g.fillStyle = gr;
-	g.fillRect(0, 0, 128, 128);
-	return tex(cv);
+// A Hertzsprung–Russell diagram, for the poster that has no photo: the main sequence from hot blue stars to cool red
+// ones, the giants above, the white dwarfs below
+function hrDiagram(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+	const rand = rng(67);
+	g.fillStyle = '#0b0f1a';
+	g.fillRect(x, y, w, h);
+	const star = (u: number, v: number, r: number) => {
+		const hue = 220 - u * 210;
+		g.fillStyle = `hsla(${hue},85%,${70 - u * 15}%,0.85)`;
+		g.beginPath(); g.arc(x + 40 + u * (w - 70), y + 20 + v * (h - 60), r, 0, Math.PI * 2); g.fill();
+	};
+	for (let i = 0; i < 520; i++) { const u = rand(); star(u, 0.08 + u * 0.78 + (rand() - 0.5) * 0.09, 2 + rand() * 3); }
+	for (let i = 0; i < 90; i++) star(0.62 + rand() * 0.32, 0.12 + rand() * 0.22, 3 + rand() * 4);
+	for (let i = 0; i < 40; i++) star(0.08 + rand() * 0.22, 0.82 + rand() * 0.1, 1.5 + rand() * 1.5);
+	g.strokeStyle = 'rgba(255,255,255,0.6)';
+	g.lineWidth = 2;
+	g.strokeRect(x + 30, y + 10, w - 50, h - 40);
+	g.font = `600 22px ${COND}`;
+	g.fillStyle = 'rgba(255,255,255,0.75)';
+	g.textAlign = 'center';
+	g.fillText('TEMPERATURE  ←  HOTTER', x + w / 2, y + h - 8);
+	g.fillText('MAIN SEQUENCE', x + w * 0.52, y + h * 0.5);
+	g.fillText('GIANTS', x + w * 0.8, y + h * 0.1);
+	g.fillText('WHITE DWARFS', x + w * 0.24, y + h * 0.78);
+	g.textAlign = 'left';
+}
+
+// An academic poster on the gallery's wall: a navy header with the title, a photo or a diagram, a few lines, and the
+// department along the foot
+function posterSheet(p: ObservatoryContent['posters'][number], onChange: () => void) {
+	const W = 1024, H = 1448;
+	const { cv, g } = canvas(W, H);
+	const t = tex(cv);
+	let img: HTMLImageElement | null = null;
+	const draw = () => {
+		g.fillStyle = '#f3f1ea';
+		g.fillRect(0, 0, W, H);
+		g.fillStyle = NAVY;
+		g.fillRect(0, 0, W, 300);
+		g.fillStyle = ORANGE;
+		g.fillRect(0, 300, W, 10);
+		g.fillStyle = '#ffffff';
+		g.font = `600 64px ${FONT}`;
+		const end = wrap(g, p.title, 60, 120, W - 120, 74);
+		g.font = `400 34px ${FONT}`;
+		g.fillStyle = 'rgba(255,255,255,0.8)';
+		g.fillText(p.sub, 60, Math.min(272, end + 20));
+		const fx = 60, fy = 360, fw = W - 120, fh = 760;
+		if (img) {
+			const k = Math.min(fw / img.width, fh / img.height), w = img.width * k, h = img.height * k;
+			g.fillStyle = '#0b0f1a';
+			g.fillRect(fx, fy, fw, fh);
+			g.drawImage(img, fx + (fw - w) / 2, fy + (fh - h) / 2, w, h);
+		} else hrDiagram(g, fx, fy, fw, fh);
+		g.strokeStyle = 'rgba(35,45,75,0.4)';
+		g.lineWidth = 2;
+		g.strokeRect(fx, fy, fw, fh);
+		g.fillStyle = '#2a2f3a';
+		g.font = `400 34px ${FONT}`;
+		wrap(g, p.body, 60, fy + fh + 70, W - 120, 46);
+		g.fillStyle = NAVY;
+		g.fillRect(0, H - 90, W, 90);
+		g.fillStyle = '#ffffff';
+		g.font = `600 30px ${COND}`;
+		g.fillText('ML-1  ·  THE OBSERVATORY  ·  DEPARTMENT OF ASTRONOMY', 60, H - 36);
+		t.needsUpdate = true;
+	};
+	if (p.src) {
+		const im = new Image();
+		im.onload = () => { img = im; draw(); onChange(); };
+		im.src = p.src;
+	}
+	draw();
+	return t;
 }
 
 // ---------- Displays ----------
@@ -663,19 +697,6 @@ function consoleSheet(): Live {
 	return { tex: t, draw };
 }
 
-// A soft shaft of light, brightest toward its source and its axis
-function beamMaterial(color: string, k: number) {
-	return new THREE.ShaderMaterial({
-		uniforms: { uColor: { value: new THREE.Color(color) }, uK: { value: k } },
-		vertexShader: /* glsl */ `varying vec2 vUv; varying float vFace;
-			void main() { vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0); vec3 n = normalize(normalMatrix * normal);
-			vFace = abs(dot(n, normalize(-mv.xyz))); gl_Position = projectionMatrix * mv; }`,
-		fragmentShader: /* glsl */ `uniform vec3 uColor; uniform float uK; varying vec2 vUv; varying float vFace;
-			void main() { float a = pow(vFace, 2.0) * mix(0.0, 0.1, vUv.y * vUv.y) * uK; gl_FragColor = vec4(uColor * a, 1.0); }`,
-		transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-	});
-}
-
 // ---------- Geometry ----------
 
 // An open arc of a cylinder about the axis (cx, cy), from angle a0 to a1 and z0 to z1, seen from inside.
@@ -736,7 +757,7 @@ function mergeChildren(group: THREE.Object3D) {
 
 // An open-truss reflector on a fork mount. The mount turns in azimuth on the pier; the tube tilts in altitude between
 // the fork's arms. In the tube's own frame the optical axis is +X and the altitude axis is Z.
-function greatTelescope(kit: Kit, m: { white: THREE.Material; whiteIn: THREE.Material; blue: THREE.Material; steel: THREE.Material; dark: THREE.Material; black: THREE.Material; mirror: THREE.Material; violet: THREE.Material; red: THREE.Material; green: THREE.Material }) {
+function greatTelescope(kit: Kit, m: { white: THREE.Material; whiteIn: THREE.Material; blue: THREE.Material; steel: THREE.Material; dark: THREE.Material; black: THREE.Material; mirror: THREE.Material; trim: THREE.Material; red: THREE.Material; green: THREE.Material }) {
 	const { put, rbox } = kit;
 	const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 	const alongX = (g: THREE.BufferGeometry) => g.rotateZ(Math.PI / 2);
@@ -750,10 +771,10 @@ function greatTelescope(kit: Kit, m: { white: THREE.Material; whiteIn: THREE.Mat
 	for (const s of [-1, 1]) {
 		put(rbox(1.5, 2.0, 0.62, m.blue, 0.05), mount, 0, 1.85, s * 1.95);
 		put(rbox(1.0, ALT_H + 0.7 - 2.85, 0.5, m.blue, 0.05), mount, 0, (2.85 + ALT_H + 0.7) / 2, s * 1.95);
-		// The altitude bearings: a housing through the arm, a disc outside it with a lit ring
+		// The altitude bearings: a housing through the arm, a disc outside it with a machined rim
 		put(new THREE.Mesh(alongZ(new THREE.CylinderGeometry(0.72, 0.72, 0.72, 40)), m.steel), mount, 0, ALT_H, s * 1.95);
 		put(new THREE.Mesh(alongZ(new THREE.CylinderGeometry(1.05, 1.05, 0.08, 64)), m.dark), mount, 0, ALT_H, s * 2.32);
-		put(new THREE.Mesh(new THREE.TorusGeometry(0.98, 0.018, 6, 64), m.violet), mount, 0, ALT_H, s * 2.37);
+		put(new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.03, 6, 64), m.trim), mount, 0, ALT_H, s * 2.37);
 		for (let k = 0; k < 10; k++) {
 			const a = (k / 10) * Math.PI * 2;
 			put(new THREE.Mesh(alongZ(new THREE.CylinderGeometry(0.045, 0.045, 0.06, 8)), m.steel), mount, Math.cos(a) * 0.86, ALT_H + Math.sin(a) * 0.86, s * 2.38);
@@ -810,40 +831,45 @@ export function observatoryBay(content: ObservatoryContent) {
 	return (kit: Kit): Interior => {
 		const { world, mat, std, glow, add, put, box, rbox, rod, face } = kit;
 		const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-		const steel = std({ color: '#4a515c', roughness: 0.4, metalness: 0.8 });
-		const darkSteel = std({ color: '#1a1e25', roughness: 0.55, metalness: 0.6 });
-		const panel = std({ color: '#0f1218', roughness: 0.75, metalness: 0.25 });
-		const blue = std({ color: '#223e78', roughness: 0.45, metalness: 0.45 });
-		const white = std({ color: '#d5d9df', roughness: 0.42, metalness: 0.2 });
-		const whiteIn = std({ color: '#d5d9df', roughness: 0.42, metalness: 0.2, side: THREE.DoubleSide });
-		const mirror = std({ color: '#c8d3e6', roughness: 0.04, metalness: 1, envMapIntensity: 1.6 });
-		const red = glow(NIGHT, 1.5), redSoft = glow(NIGHT, 0.8), violet = glow(VIOLET, 1.5), violetSoft = glow(VIOLET, 0.7);
+		const steel = std({ color: '#7a8189', roughness: 0.4, metalness: 0.75 });
+		const darkSteel = std({ color: '#2a2e34', roughness: 0.55, metalness: 0.5 });
+		const bezel = std({ color: '#16181b', roughness: 0.5, metalness: 0.2 });
+		const wallPaint = std({ color: '#8e9297', roughness: 0.85, metalness: 0.05 });
+		const concrete = std({ color: '#6f7377', roughness: 0.9, metalness: 0.02 });
+		const concreteDark = std({ color: '#5d6165', roughness: 0.9, metalness: 0.02 });
+		const yellow = std({ color: SAFETY, roughness: 0.55, metalness: 0.15 });
+		const alu = std({ color: '#b9bec5', roughness: 0.3, metalness: 0.9 });
+		const blue = std({ color: '#2f4a73', roughness: 0.45, metalness: 0.4 });
+		const white = std({ color: '#d9dcdf', roughness: 0.42, metalness: 0.15 });
+		const whiteIn = std({ color: '#d9dcdf', roughness: 0.42, metalness: 0.15, side: THREE.DoubleSide });
+		const mirror = std({ color: '#c8d3e6', roughness: 0.04, metalness: 1, envMapIntensity: 2.5 });
+		const brass = std({ color: '#b58a3c', roughness: 0.32, metalness: 0.9 });
+		const wood = std({ color: '#3b2516', roughness: 0.55, metalness: 0.05 });
+		const lamp = glow('#fff3e2', 0.5);
 		const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1), col = new THREE.Color();
 
-		// ---------- Hull: the vault with its slit, ribs every four metres, the floor ----------
-		const vault = vaultSheet();
-		const hullMat = std({ map: vault, emissiveMap: vault, emissive: '#ffffff', emissiveIntensity: 0.6, roughness: 0.85, metalness: 0.1, side: THREE.BackSide });
+		// ---------- Hull: the dome's panels with the slit cut through, steel ribs every four metres, the floor ----------
+		const hullMat = std({ map: domeSheet(), roughness: 0.8, metalness: 0.1, side: THREE.BackSide });
 		add(arc(RH, SLIT.a1, SLIT.a0 + Math.PI * 2, Z0, Z1, 150), hullMat);
 		add(arc(RH, SLIT.a0, SLIT.a1, Z0, SLIT.z0, 8), hullMat);
 		add(arc(RH, SLIT.a0, SLIT.a1, SLIT.z1, Z1, 8), hullMat);
 		for (let z = -11; z <= 17; z += 4) {
 			const cut = z > SLIT.z0 - 0.2 && z < SLIT.z1 + 0.2;
 			const rib = cut
-				? new THREE.TorusGeometry(RH - 0.14, 0.15, 8, 110, Math.PI * 2 - (SLIT.a1 - SLIT.a0) - 0.04).rotateZ(SLIT.a1 + 0.02)
-				: new THREE.TorusGeometry(RH - 0.14, 0.15, 8, 120);
-			add(rib, darkSteel, 0, 0, z);
+				? new THREE.TorusGeometry(RH - 0.16, 0.16, 8, 110, Math.PI * 2 - (SLIT.a1 - SLIT.a0) - 0.04).rotateZ(SLIT.a1 + 0.02)
+				: new THREE.TorusGeometry(RH - 0.16, 0.16, 8, 120);
+			add(rib, steel, 0, 0, z);
 		}
-		const floorTex = floorSheet();
-		const floor = new THREE.Mesh(new THREE.PlaneGeometry(HW * 2, Z1 - Z0), std({ map: floorTex, emissiveMap: floorTex, emissive: '#ffffff', emissiveIntensity: 0.7, roughness: 0.48, metalness: 0.3 }));
+		const floor = new THREE.Mesh(new THREE.PlaneGeometry(HW * 2, Z1 - Z0), std({ map: floorSheet(), roughness: 0.7, metalness: 0.1 }));
 		floor.rotation.x = -Math.PI / 2;
 		floor.position.set(0, FL, (Z0 + Z1) / 2);
 		world.add(floor);
 
-		// ---------- The slit: its frame, the shutters drawn back either side, a shaft of starlight through it ----------
+		// ---------- The slit: its frame, and the shutters drawn back either side onto the night sky ----------
 		const rIn = RH - 0.06;
 		for (const a of [SLIT.a0, SLIT.a1]) rod(V(Math.cos(a) * rIn, Math.sin(a) * rIn, SLIT.z0), V(Math.cos(a) * rIn, Math.sin(a) * rIn, SLIT.z1), 0.12, steel);
 		for (const z of [SLIT.z0, SLIT.z1]) add(new THREE.TorusGeometry(rIn, 0.12, 8, 16, SLIT.a1 - SLIT.a0).rotateZ(SLIT.a0), steel, 0, 0, z);
-		const shutterMat = std({ color: '#1d222b', roughness: 0.6, metalness: 0.5, side: THREE.BackSide });
+		const shutterMat = std({ color: '#4c5157', roughness: 0.6, metalness: 0.4, side: THREE.BackSide });
 		for (const [a0, a1] of [[SLIT.a0 - 0.4, SLIT.a0 - 0.02], [SLIT.a1 + 0.02, SLIT.a1 + 0.4]]) {
 			add(arc(RH - 0.35, a0, a1, SLIT.z0 - 0.3, SLIT.z1 + 0.3, 16), shutterMat);
 			for (let k = 0; k <= 4; k++) {
@@ -851,58 +877,18 @@ export function observatoryBay(content: ObservatoryContent) {
 				rod(V(Math.cos(a) * (RH - 0.4), Math.sin(a) * (RH - 0.4), SLIT.z0 - 0.3), V(Math.cos(a) * (RH - 0.4), Math.sin(a) * (RH - 0.4), SLIT.z1 + 0.3), 0.05, steel);
 			}
 		}
-		// Red lamps along the slit's edges
-		for (const a of [SLIT.a0, SLIT.a1]) for (let z = SLIT.z0 + 0.5; z < SLIT.z1; z += 1.5) add(new THREE.SphereGeometry(0.05, 8, 6), red, Math.cos(a) * (RH - 0.2), Math.sin(a) * (RH - 0.2), z);
-		// Down through the open truss onto the primary mirror
-		const shaftTop = SLIT.hit.clone().addScaledVector(SLIT.dir, -0.3), shaftFoot = SLIT.axis.clone().addScaledVector(SLIT.dir, -0.5);
-		const shaftLen = shaftTop.distanceTo(shaftFoot);
-		const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.25, shaftLen, 32, 1, true), beamMaterial('#9fb8ff', 0.9));
-		shaft.position.copy(shaftTop).add(shaftFoot).multiplyScalar(0.5);
-		shaft.quaternion.setFromUnitVectors(UP, SLIT.dir);
-		world.add(shaft);
 
-		// Stars across the vault that twinkle: points on the hull whose size breathes, each at its own pace
-		const starPos: number[] = [], phase: number[] = [], speed: number[] = [], size: number[] = [], starCol: number[] = [];
-		const srand = rng(97);
-		for (let i = 0; i < 1400; i++) {
-			const a = 0.12 + srand() * (Math.PI - 0.24), z = -12.5 + srand() * 31;
-			if (a > SLIT.a0 - 0.45 && a < SLIT.a1 + 0.45 && z > SLIT.z0 - 0.5 && z < SLIT.z1 + 0.5) continue;
-			const r = RH - 0.08;
-			starPos.push(Math.cos(a) * r, Math.sin(a) * r, z);
-			phase.push(srand() * Math.PI * 2);
-			speed.push(0.6 + srand() * 2.2);
-			size.push(0.5 + srand() * srand() * 1.6);
-			col.set(srand() > 0.8 ? '#ffd9a8' : srand() > 0.6 ? '#bcd2ff' : '#ffffff');
-			starCol.push(col.r, col.g, col.b);
-		}
-		const starGeo = new THREE.BufferGeometry();
-		starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
-		starGeo.setAttribute('color', new THREE.Float32BufferAttribute(starCol, 3));
-		starGeo.setAttribute('aPhase', new THREE.Float32BufferAttribute(phase, 1));
-		starGeo.setAttribute('aSpeed', new THREE.Float32BufferAttribute(speed, 1));
-		starGeo.setAttribute('aSize', new THREE.Float32BufferAttribute(size, 1));
-		const twinkle = { value: 0 };
-		const starMat = new THREE.PointsMaterial({ map: glowDot('rgba(255,255,255,1)', 'rgba(220,230,255,0.5)'), size: 0.16, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
-		starMat.color.setScalar(1.7);
-		starMat.onBeforeCompile = (shader) => {
-			shader.uniforms.uTime = twinkle;
-			shader.vertexShader = 'uniform float uTime;\nattribute float aPhase;\nattribute float aSpeed;\nattribute float aSize;\n' +
-				shader.vertexShader.replace('gl_PointSize = size;', 'gl_PointSize = size * aSize * (0.55 + 0.45 * sin(uTime * aSpeed + aPhase));');
-		};
-		world.add(new THREE.Points(starGeo, starMat));
-
-		// ---------- The entrance: the hatch at the end of a tunnel of baffle rings, lit red for dark-adapted eyes ----------
-		const bulkMat = std({ color: '#0d1015', roughness: 0.8, metalness: 0.2 });
+		// ---------- The entrance: a plain corridor from the hatch, ribbed, with lamps along its crown ----------
+		const bulkMat = std({ color: '#4a4f55', roughness: 0.8, metalness: 0.2 });
 		const { door, wheel } = kit.hatch({ z: Z0, y: HATCH_Y, radius: RH, material: bulkMat });
-		add(arc(TUN.r + 0.02, TA, Math.PI - TA, Z0, TUN.z1, 48, 0, TUN.cy), std({ color: '#12151b', roughness: 0.7, metalness: 0.3, side: THREE.BackSide }));
-		const baffle = std({ color: '#0b0d11', roughness: 0.6, metalness: 0.4, side: THREE.DoubleSide });
-		let n = 0;
-		for (let z = Z0 + 0.9; z < TUN.z1 - 0.2; z += 0.8, n++) {
-			add(new THREE.RingGeometry(TUN.r - 0.42, TUN.r, 48, 1, TA, Math.PI - 2 * TA), baffle, 0, TUN.cy, z);
-			add(new THREE.TorusGeometry(TUN.r - 0.42, 0.014, 6, 48, Math.PI - 2 * TA).rotateZ(TA), n % 2 ? violetSoft : redSoft, 0, TUN.cy, z);
+		add(arc(TUN.r + 0.02, TA, Math.PI - TA, Z0, TUN.z1, 48, 0, TUN.cy), std({ color: '#4d5257', roughness: 0.85, metalness: 0.1, side: THREE.BackSide }));
+		const ribMat = std({ color: '#6d747c', roughness: 0.5, metalness: 0.6, side: THREE.DoubleSide });
+		for (let z = Z0 + 1.2; z < TUN.z1 - 0.2; z += 1.6) {
+			add(new THREE.RingGeometry(TUN.r - 0.16, TUN.r, 48, 1, TA, Math.PI - 2 * TA), ribMat, 0, TUN.cy, z);
+			box(0.5, 0.03, 0.9, lamp, 0, TUN.cy + TUN.r - 0.2, z + 0.8);
 		}
-		for (const e of [-1, 1]) box(0.05, 0.03, TUN.z1 - Z0, red, e * (TW - 0.18), FL + 0.02, (Z0 + TUN.z1) / 2);
-		// The mouth: a wall across the hull with the arch through it, its frame lit, the bay's name over it
+		for (const e of [-1, 1]) box(0.06, 0.12, TUN.z1 - Z0, darkSteel, e * (TW - 0.1), FL + 0.06, (Z0 + TUN.z1) / 2);
+		// The mouth: a wall across the hull with the arch through it, framed in steel, the bay's name over it
 		const mouth = new THREE.Shape().absarc(0, 0, RH, 0, Math.PI * 2, false);
 		const hole = new THREE.Path();
 		for (let i = 0; i <= 48; i++) {
@@ -913,37 +899,34 @@ export function observatoryBay(content: ObservatoryContent) {
 		mouth.holes.push(hole);
 		add(new THREE.ShapeGeometry(mouth, 96), bulkMat, 0, 0, TUN.z1);
 		add(new THREE.TorusGeometry(TUN.r + 0.14, 0.14, 10, 64, Math.PI - 2 * TA).rotateZ(TA), steel, 0, TUN.cy, TUN.z1 + 0.05);
-		add(new THREE.TorusGeometry(TUN.r + 0.32, 0.025, 6, 64, Math.PI - 2 * TA).rotateZ(TA), violet, 0, TUN.cy, TUN.z1 + 0.04);
-		const sign = new THREE.Mesh(new THREE.PlaneGeometry(8, 2), new THREE.MeshBasicMaterial({ map: nameSign('THE OBSERVATORY', 'HABITAT BAY 2  ·  ML-1'), transparent: true, depthWrite: false }));
+		const sign = new THREE.Mesh(new THREE.PlaneGeometry(8, 2), new THREE.MeshBasicMaterial({ map: nameSign('THE OBSERVATORY', 'HABITAT BAY 2  ·  ML-1'), transparent: true, depthWrite: false, color: new THREE.Color(0.8, 0.8, 0.8) }));
 		sign.position.set(0, FL + 6.4, TUN.z1 + 0.03);
 		world.add(sign);
-		for (const e of [-1, 1]) add(new THREE.SphereGeometry(0.06, 10, 8), red, e * 3.6, FL + 2.6, TUN.z1 + 0.06);
 
-		// ---------- The great telescope on its dais ----------
+		// ---------- The great telescope on its concrete dais ----------
 		TEL.steps.forEach((r, k) => {
 			const top = FL + TEL.rise * (k + 1);
-			add(new THREE.CylinderGeometry(r, r, top - FL, 96), k % 2 ? darkSteel : panel, TEL.x, (top + FL) / 2, TEL.z);
-			add(new THREE.TorusGeometry(r - 0.04, 0.018, 6, 128).rotateX(Math.PI / 2), redSoft, TEL.x, top + 0.004, TEL.z);
+			add(new THREE.CylinderGeometry(r, r, top - FL, 96), k % 2 ? concreteDark : concrete, TEL.x, (top + FL) / 2, TEL.z);
+			add(new THREE.TorusGeometry(r - 0.03, 0.025, 6, 128).rotateX(Math.PI / 2), yellow, TEL.x, top, TEL.z);
 		});
-		add(new THREE.CylinderGeometry(TEL.pier, TEL.pier + 0.1, 0.55, 64), darkSteel, TEL.x, DAIS + 0.275, TEL.z);
+		add(new THREE.CylinderGeometry(TEL.pier, TEL.pier + 0.1, 0.55, 64), concrete, TEL.x, DAIS + 0.275, TEL.z);
 		add(new THREE.TorusGeometry(TEL.pier, 0.05, 8, 96).rotateX(Math.PI / 2), steel, TEL.x, DAIS + 0.55, TEL.z);
 		for (let k = 0; k < 28; k++) {
 			const a = (k / 28) * Math.PI * 2;
 			add(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 8), steel, TEL.x + Math.cos(a) * (TEL.pier - 0.15), DAIS + 0.58, TEL.z + Math.sin(a) * (TEL.pier - 0.15));
 		}
-		const scope = greatTelescope(kit, { white, whiteIn, blue, steel, dark: darkSteel, black: mat.plastic, mirror, violet, red, green: mat.green });
+		const scope = greatTelescope(kit, { white, whiteIn, blue, steel, dark: darkSteel, black: mat.plastic, mirror, trim: alu, red: glow('#ff3b2f', 1.2), green: mat.green });
 		scope.mount.position.set(TEL.x, DAIS, TEL.z);
 		world.add(scope.mount);
-		// A cool spot from high on the hull picks it out of the dark
-		const spot = new THREE.SpotLight('#cfdcff', 150, 0, 0.42, 0.7, 2);
+		// A work light high on the hull keeps it in view
+		const spot = new THREE.SpotLight('#f3efe6', 55, 0, 0.42, 0.7, 2);
 		spot.position.set(1.5, 10.5, -1.5);
 		spot.target.position.set(TEL.x, DAIS + 3.4, TEL.z);
 		world.add(spot, spot.target);
-		// The maintenance catwalk ringing the tube, hung from the hull, a ladder down to the dais
+		// The maintenance catwalk ringing the tube, hung from the hull, a ladder down to the dais; its handrails yellow
 		const cwY = CW.y, cw = CW;
-		add(new THREE.RingGeometry(2.3, 3.0, 64).rotateX(-Math.PI / 2), std({ color: '#1b1f26', roughness: 0.6, metalness: 0.6, side: THREE.DoubleSide }), cw.x, cwY, cw.z);
-		for (const [r, y, t] of [[3.0, 1.05, 0.035], [3.0, 0.55, 0.02], [2.3, 1.05, 0.035], [3.0, 0.02, 0.05], [2.3, 0.02, 0.05]] as const) add(new THREE.TorusGeometry(r, t, 6, 96).rotateX(Math.PI / 2), steel, cw.x, cwY + y, cw.z);
-		add(new THREE.TorusGeometry(3.02, 0.015, 6, 96).rotateX(Math.PI / 2), red, cw.x, cwY - 0.04, cw.z);
+		add(new THREE.RingGeometry(2.3, 3.0, 64).rotateX(-Math.PI / 2), std({ color: '#3a3f45', roughness: 0.6, metalness: 0.6, side: THREE.DoubleSide }), cw.x, cwY, cw.z);
+		for (const [r, y, t, m] of [[3.0, 1.05, 0.035, yellow], [3.0, 0.55, 0.02, steel], [2.3, 1.05, 0.035, yellow], [3.0, 0.05, 0.05, steel], [2.3, 0.05, 0.05, steel]] as const) add(new THREE.TorusGeometry(r, t, 6, 96).rotateX(Math.PI / 2), m, cw.x, cwY + y, cw.z);
 		for (let k = 0; k < 16; k++) {
 			const a = (k / 16) * Math.PI * 2;
 			for (const r of [2.3, 3.0]) rod(V(cw.x + Math.cos(a) * r, cwY, cw.z + Math.sin(a) * r), V(cw.x + Math.cos(a) * r, cwY + 1.05, cw.z + Math.sin(a) * r), 0.02, steel);
@@ -953,16 +936,16 @@ export function observatoryBay(content: ObservatoryContent) {
 			const a = (k / 6) * Math.PI * 2 + 0.3, x = cw.x + Math.cos(a) * 3.0, z = cw.z + Math.sin(a) * 3.0;
 			rod(V(x, cwY + 1.05, z), V(x, Math.sqrt(RH * RH - x * x) - 0.1, z), 0.03, steel);
 		}
-		for (const dx of [-0.25, 0.25]) rod(V(LADDER.x + dx, DAIS, LADDER.z), V(LADDER.x + dx, cwY + 1.05, LADDER.z), 0.03, steel);
+		for (const dx of [-0.25, 0.25]) rod(V(LADDER.x + dx, DAIS, LADDER.z), V(LADDER.x + dx, cwY + 1.05, LADDER.z), 0.03, yellow);
 		for (let y = DAIS + 0.3; y < cwY; y += 0.3) rod(V(LADDER.x - 0.25, y, LADDER.z), V(LADDER.x + 0.25, y, LADDER.z), 0.015, steel);
 
-		// ---------- The instrument gallery along the -X wall, its stair, and the spectrum frieze beneath ----------
+		// ---------- The instrument gallery along the -X wall, its stair, and posters on the wall beneath ----------
 		const mz = (MEZ.z0 + MEZ.z1) / 2, ml = MEZ.z1 - MEZ.z0, mx0 = -12.3;
-		box(MEZ.x - mx0, MEZ.y - FL, ml, panel, (MEZ.x + mx0) / 2, (MEZ.y + FL) / 2, mz);
+		box(MEZ.x - mx0, MEZ.y - FL, ml, wallPaint, (MEZ.x + mx0) / 2, (MEZ.y + FL) / 2, mz);
 		const grating = (() => {
 			const { cv, g } = canvas(128, 128);
-			g.fillStyle = '#20252d'; g.fillRect(0, 0, 128, 128);
-			g.fillStyle = '#0a0c10';
+			g.fillStyle = '#5a6068'; g.fillRect(0, 0, 128, 128);
+			g.fillStyle = '#23262b';
 			for (let i = 4; i < 128; i += 16) for (let j = 4; j < 128; j += 16) g.fillRect(i, j, 10, 10);
 			const t = tex(cv);
 			t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -970,24 +953,35 @@ export function observatoryBay(content: ObservatoryContent) {
 			return t;
 		})();
 		box(MEZ.x - mx0, 0.04, ml, std({ map: grating, roughness: 0.5, metalness: 0.7 }), (MEZ.x + mx0) / 2, MEZ.y + 0.02, mz);
-		box(0.03, 0.05, ml, red, MEZ.x + 0.02, MEZ.y - 0.16, mz);
-		const frieze = new THREE.Mesh(new THREE.PlaneGeometry(ml - 1.2, 0.5), new THREE.MeshBasicMaterial({ map: tex(spectrumBand(4096, 128)), color: new THREE.Color(0.7, 0.7, 0.7) }));
-		frieze.position.set(MEZ.x + 0.012, FL + 1.55, mz);
-		frieze.rotation.y = Math.PI / 2;
-		world.add(frieze);
-		for (const y of [FL + 1.26, FL + 1.84]) box(0.04, 0.04, ml - 1.0, steel, MEZ.x + 0.02, y, mz);
-		// The landing and the flight down toward the hall
-		box(STAIR.x1 - STAIR.x0, MEZ.y - FL, STAIR.zt - STAIR.z0, panel, (STAIR.x0 + STAIR.x1) / 2, (MEZ.y + FL) / 2, (STAIR.z0 + STAIR.zt) / 2);
+		box(0.06, 0.3, ml, steel, MEZ.x + 0.03, MEZ.y - 0.15, mz);
+		box(0.03, 0.12, ml, darkSteel, MEZ.x + 0.015, FL + 0.06, mz);
+		// Four posters between the stair and the gallery's far end, each under a small picture light
+		const posterAt = [-2.75, -0.85, 1.05, 2.95];
+		content.posters.slice(0, posterAt.length).forEach((p, i) => {
+			const z = posterAt[i], y = FL + 1.75;
+			const t = posterSheet(p, kit.redraw);
+			const pm = add(new THREE.PlaneGeometry(1.3, 1.84), std({ map: t, emissiveMap: t, emissive: '#ffffff', emissiveIntensity: 0.18, roughness: 0.85 }), MEZ.x + 0.025, y, z);
+			pm.rotation.y = Math.PI / 2;
+			for (const dz of [-0.67, 0.67]) box(0.03, 1.9, 0.03, alu, MEZ.x + 0.03, y, z + dz);
+			for (const dy of [-0.94, 0.94]) box(0.03, 0.03, 1.37, alu, MEZ.x + 0.03, y + dy, z);
+			box(0.08, 0.04, 0.5, alu, MEZ.x + 0.12, y + 1.08, z);
+			box(0.02, 0.012, 0.44, lamp, MEZ.x + 0.15, y + 1.06, z);
+		});
+		const posterLight = new THREE.PointLight('#ffe7c9', 3.5, 9, 2);
+		posterLight.position.set(MEZ.x + 1.6, FL + 2.9, 0.1);
+		world.add(posterLight);
+		// The landing and the flight down toward the hall, a yellow nosing on every step
+		box(STAIR.x1 - STAIR.x0, MEZ.y - FL, STAIR.zt - STAIR.z0, wallPaint, (STAIR.x0 + STAIR.x1) / 2, (MEZ.y + FL) / 2, (STAIR.z0 + STAIR.zt) / 2);
 		const steps = 16, run = (STAIR.zb - STAIR.zt) / steps;
 		for (let i = 0; i < steps; i++) {
 			const top = MEZ.y - ((i + 1) * (MEZ.y - FL)) / (steps + 1), z = STAIR.zt + (i + 0.5) * run;
-			box(STAIR.x1 - STAIR.x0, top - FL, run, i % 2 ? panel : darkSteel, (STAIR.x0 + STAIR.x1) / 2, (top + FL) / 2, z);
-			box(STAIR.x1 - STAIR.x0 - 0.1, 0.02, 0.03, redSoft, (STAIR.x0 + STAIR.x1) / 2, top + 0.01, z + run / 2 - 0.03);
+			box(STAIR.x1 - STAIR.x0, top - FL, run, i % 2 ? concrete : concreteDark, (STAIR.x0 + STAIR.x1) / 2, (top + FL) / 2, z);
+			box(STAIR.x1 - STAIR.x0 - 0.06, 0.012, 0.05, yellow, (STAIR.x0 + STAIR.x1) / 2, top + 0.006, z + run / 2 - 0.03);
 		}
 		// Railings: along the gallery's edge (open at the landing), across its ends, and down the stair's open side
 		const railTop = 1.05;
 		const railRun = (a: THREE.Vector3, b: THREE.Vector3, every = 1.4) => {
-			rod(a.clone().setY(a.y + railTop), b.clone().setY(b.y + railTop), 0.03, steel);
+			rod(a.clone().setY(a.y + railTop), b.clone().setY(b.y + railTop), 0.03, yellow);
 			rod(a.clone().setY(a.y + 0.55), b.clone().setY(b.y + 0.55), 0.018, steel);
 			const n = Math.max(1, Math.round(a.distanceTo(b) / every));
 			for (let k = 0; k <= n; k++) {
@@ -1002,9 +996,9 @@ export function observatoryBay(content: ObservatoryContent) {
 		railRun(V(STAIR.x0, MEZ.y, STAIR.z0), V(STAIR.x1, MEZ.y, STAIR.z0));
 		railRun(V(STAIR.x1, MEZ.y, STAIR.z0), V(STAIR.x1, MEZ.y, STAIR.zt));
 		railRun(V(STAIR.x1, MEZ.y, STAIR.zt), V(STAIR.x1, FL, STAIR.zb), 1.2);
-		// Racks of instruments, two displays on the wall, a desk and a stool between them
+		// Racks of instruments, two wall monitors, a desk and a stool under each
 		const rackTex = rackSheet();
-		const rackFace = std({ map: rackTex, emissiveMap: rackTex, emissive: '#ffffff', emissiveIntensity: 1.2, roughness: 0.5 });
+		const rackFace = std({ map: rackTex, emissiveMap: rackTex, emissive: '#ffffff', emissiveIntensity: 0.8, roughness: 0.5 });
 		for (const z of [-11.2, -10.2, 3.2, 4.2]) {
 			put(rbox(0.9, 2.1, 0.9, darkSteel, 0.03), world, -10.8, MEZ.y + 1.05, z);
 			const f = add(new THREE.PlaneGeometry(0.8, 2.0), rackFace, -10.34, MEZ.y + 1.05, z);
@@ -1015,49 +1009,64 @@ export function observatoryBay(content: ObservatoryContent) {
 			const g = new THREE.Group();
 			g.position.set(-11.15, MEZ.y + 1.95, z);
 			g.rotation.y = Math.PI / 2;
-			put(rbox(3.6, 2.4, 0.14, darkSteel, 0.04), g, 0, 0, -0.08);
+			put(rbox(3.5, 2.24, 0.1, bezel, 0.03), g, 0, 0, -0.06);
 			put(face(l.tex, 3.36, 2.1, true), g, 0, 0, 0.004);
-			put(new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.025, 0.025), violet), g, 0, -1.28, 0.02);
 			world.add(g);
 			kit.live(l, g, 1 / 8, 30, 2);
-			put(rbox(0.8, 0.06, 1.6, darkSteel, 0.02), world, -10.3, MEZ.y + 0.76, z);
-			box(0.6, 0.72, 0.08, steel, -10.3, MEZ.y + 0.37, z);
+			put(rbox(0.8, 0.05, 1.6, std({ color: '#c4c7ca', roughness: 0.6 }), 0.02), world, -10.3, MEZ.y + 0.76, z);
+			box(0.6, 0.72, 0.08, darkSteel, -10.3, MEZ.y + 0.37, z);
 			add(new THREE.CylinderGeometry(0.2, 0.2, 0.06, 20), mat.seat, -9.4, MEZ.y + 0.55, z);
 			add(new THREE.CylinderGeometry(0.03, 0.03, 0.52, 8), steel, -9.4, MEZ.y + 0.26, z);
 		}
-		const galleryLight = new THREE.PointLight('#8fb0ff', 7, 11, 2);
+		const galleryLight = new THREE.PointLight('#ffe9cf', 3, 11, 2);
 		galleryLight.position.set(-8.6, MEZ.y + 2.8, -3.6);
 		world.add(galleryLight);
 
-		// ---------- The orrery: the planets on their orbits in a black disc in the floor ----------
-		add(new THREE.CylinderGeometry(ORR.r + 0.25, ORR.r + 0.3, 0.3, 96), darkSteel, 0, FL + 0.15, ORR.z);
-		add(new THREE.CircleGeometry(ORR.r + 0.1, 96).rotateX(-Math.PI / 2), std({ color: '#030409', roughness: 0.12, metalness: 0.6 }), 0, FL + 0.305, ORR.z);
-		add(new THREE.TorusGeometry(ORR.r + 0.26, 0.03, 6, 128).rotateX(Math.PI / 2), violet, 0, FL + 0.3, ORR.z);
+		// ---------- The orrery: a brass one on a wooden pedestal, behind a ring of rope stanchions ----------
+		add(new THREE.CylinderGeometry(0.62, 0.66, 0.08, 40), wood, 0, FL + 0.04, ORR.z);
+		add(new THREE.CylinderGeometry(0.3, 0.42, 0.72, 32), wood, 0, FL + 0.44, ORR.z);
+		add(new THREE.CylinderGeometry(0.72, 0.68, 0.06, 48), wood, 0, FL + 0.83, ORR.z);
+		add(new THREE.TorusGeometry(0.72, 0.015, 6, 64).rotateX(Math.PI / 2), brass, 0, FL + 0.86, ORR.z);
+		add(new THREE.CylinderGeometry(0.03, 0.05, 0.26, 12), brass, 0, FL + 0.99, ORR.z);
+		add(new THREE.SphereGeometry(0.1, 24, 16), glow('#ffd79a', 1.15), 0, FL + 1.18, ORR.z);
+		// The graduated ring of the zodiac around them all, on four brass stays
+		add(new THREE.TorusGeometry(ORR.r, 0.012, 6, 128).rotateX(Math.PI / 2), brass, 0, FL + 0.93, ORR.z);
+		for (let k = 0; k < 4; k++) {
+			const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+			rod(V(Math.cos(a) * 0.66, FL + 0.86, ORR.z + Math.sin(a) * 0.66), V(Math.cos(a) * ORR.r, FL + 0.93, ORR.z + Math.sin(a) * ORR.r), 0.008, brass);
+		}
 		const planets = [
-			{ a: 0.7, r: 0.05, c: '#a79c8e' }, { a: 0.95, r: 0.08, c: '#e3c78f' }, { a: 1.22, r: 0.085, c: '#5f8fe0' }, { a: 1.5, r: 0.065, c: '#c9653b' },
-			{ a: 1.95, r: 0.2, c: '#d8b48a' }, { a: 2.35, r: 0.17, c: '#e2cd96' }, { a: 2.65, r: 0.12, c: '#9fd8e6' }, { a: 2.9, r: 0.115, c: '#5a7de0' },
-		].map((p, i) => ({ ...p, w: 0.5 * Math.pow(p.a, -1.5), off: i * 2.1 }));
-		for (const p of planets) add(new THREE.TorusGeometry(p.a, 0.008, 4, 128).rotateX(Math.PI / 2), violetSoft, 0, FL + 0.31, ORR.z);
-		const orbs = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: '#ffffff' }), planets.length);
-		orbs.frustumCulled = false; // its bounds would be taken from where the planets first stood
-		planets.forEach((p, i) => orbs.setColorAt(i, col.set(p.c).multiplyScalar(1.1)));
-		world.add(orbs);
-		const ringed = new THREE.Mesh(new THREE.RingGeometry(0.24, 0.36, 40).rotateX(-Math.PI / 2 + 0.3), new THREE.MeshBasicMaterial({ color: new THREE.Color('#d9c18f').multiplyScalar(0.9), side: THREE.DoubleSide }));
+			{ a: 0.28, r: 0.022, c: '#a79c8e' }, { a: 0.4, r: 0.035, c: '#e3c78f' }, { a: 0.52, r: 0.037, c: '#5f8fe0' }, { a: 0.64, r: 0.03, c: '#c9653b' },
+			{ a: 0.82, r: 0.07, c: '#d8b48a' }, { a: 0.98, r: 0.06, c: '#e2cd96' }, { a: 1.12, r: 0.045, c: '#9fd8e6' }, { a: 1.24, r: 0.044, c: '#5a7de0' },
+		].map((p, i) => ({ ...p, w: 0.35 * Math.pow(p.a, -1.5), off: i * 2.1, y: FL + 0.97 + i * 0.014 }));
+		const instanced = (g: THREE.BufferGeometry, m: THREE.Material) => {
+			const im = new THREE.InstancedMesh(g, m, planets.length);
+			im.frustumCulled = false; // its bounds would be taken from where the planets first stood
+			world.add(im);
+			return im;
+		};
+		const arms = instanced(new THREE.BoxGeometry(1, 0.01, 0.012).translate(0.5, 0, 0), brass);
+		const posts = instanced(new THREE.CylinderGeometry(0.005, 0.005, 1, 6).translate(0, 0.5, 0), brass);
+		const orbs = instanced(new THREE.SphereGeometry(1, 20, 14), std({ color: '#ffffff', roughness: 0.5, metalness: 0.1 }));
+		planets.forEach((p, i) => orbs.setColorAt(i, col.set(p.c)));
+		const ringed = new THREE.Mesh(new THREE.RingGeometry(0.08, 0.12, 40).rotateX(-Math.PI / 2 + 0.3), std({ color: '#d9c18f', roughness: 0.6, side: THREE.DoubleSide }));
 		ringed.userData.keep = true;
 		world.add(ringed);
-		add(new THREE.SphereGeometry(0.3, 32, 20), glow('#ffcf7a', 2.4), 0, FL + 0.62, ORR.z);
-		const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowDot('rgba(255,236,190,1)', 'rgba(255,190,90,0.35)'), blending: THREE.AdditiveBlending, depthWrite: false }));
-		halo.position.set(0, FL + 0.62, ORR.z);
-		halo.scale.setScalar(2.2);
-		world.add(halo);
-		const sunLight = new THREE.PointLight('#ffc27a', 9, 7, 2);
-		sunLight.position.set(0, FL + 1.0, ORR.z);
-		world.add(sunLight);
+		for (let k = 0; k < 6; k++) {
+			const a = (k / 6) * Math.PI * 2, b = ((k + 1) / 6) * Math.PI * 2;
+			const p = V(Math.cos(a) * ORR.rope, FL, ORR.z + Math.sin(a) * ORR.rope), n = V(Math.cos(b) * ORR.rope, FL, ORR.z + Math.sin(b) * ORR.rope);
+			add(new THREE.CylinderGeometry(0.025, 0.025, 0.92, 12), brass, p.x, FL + 0.46, p.z);
+			add(new THREE.SphereGeometry(0.045, 12, 8), brass, p.x, FL + 0.94, p.z);
+			add(new THREE.CylinderGeometry(0.14, 0.16, 0.03, 20), brass, p.x, FL + 0.015, p.z);
+			const sag = new THREE.QuadraticBezierCurve3(p.clone().setY(FL + 0.86), p.clone().lerp(n, 0.5).setY(FL + 0.66), n.clone().setY(FL + 0.86));
+			add(new THREE.TubeGeometry(sag, 16, 0.018, 6, false), std({ color: '#2a3558', roughness: 0.9 }));
+		}
 
-		// ---------- The console bank before the screen ----------
+		// ---------- The control desks before the screen, two monitors and a keyboard at each ----------
 		const consoles = consoleSheet();
 		const cq = new Quads();
 		const deskSpots: { x: number; z: number; r: number }[] = [];
+		const laminate = std({ color: '#c4c7ca', roughness: 0.6, metalness: 0.05 });
 		for (const x of [-5.2, -2.6, 0, 2.6, 5.2]) {
 			const z = CONS.z - 0.025 * x * x, r = -x * 0.035;
 			deskSpots.push({ x, z, r });
@@ -1065,20 +1074,21 @@ export function observatoryBay(content: ObservatoryContent) {
 			desk.position.set(x, FL, z);
 			desk.rotation.y = r;
 			world.add(desk);
-			put(rbox(2.3, 0.07, 0.85, darkSteel, 0.02), desk, 0, 0.76, 0);
-			put(new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.72, 0.55), panel), desk, 0, 0.36, 0.1);
-			put(new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.02, 0.02), red), desk, 0, 0.8, -0.43);
-			// The screens' panel leans back, away from whoever sits at the desk
-			// Kept low enough to see the foot of the main screen over
-			const back = put(rbox(2.25, 0.42, 0.06, darkSteel, 0.02), desk, 0, 0.95, 0.36);
-			back.rotation.x = 0.5;
+			put(rbox(2.3, 0.05, 0.85, laminate, 0.015), desk, 0, 0.77, 0);
+			put(new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.72, 0.5), darkSteel), desk, 0, 0.37, 0.12);
 			const deskM = M(x, FL, z, r);
+			// Kept low enough to see the foot of the main screen over
 			for (const [sx, cellI] of [[-0.55, deskSpots.length % 6], [0.55, (deskSpots.length + 2) % 6]] as const) {
+				const mon = put(rbox(0.66, 0.42, 0.035, bezel, 0.01), desk, sx, 1.1, 0.215);
+				mon.rotation.x = 0.08;
+				put(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.04), bezel), desk, sx, 0.93, 0.25);
+				put(new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.015, 0.18), bezel), desk, sx, 0.8, 0.22);
+				put(new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.02, 0.15), mat.plastic), desk, sx, 0.805, -0.12);
 				const c = cellI % CELL.cols, rr = Math.floor(cellI / CELL.cols);
-				cq.add(deskM.clone().multiply(M(sx, 0.95, 0.3, Math.PI, -0.5)), 0.92, 0.33, [c / CELL.cols, 1 - (rr + 1) / CELL.rows, (c + 1) / CELL.cols, 1 - rr / CELL.rows]);
+				cq.add(deskM.clone().multiply(M(sx, 1.1, 0.193, Math.PI, -0.08)), 0.6, 0.375, [c / CELL.cols, 1 - (rr + 1) / CELL.rows, (c + 1) / CELL.cols, 1 - rr / CELL.rows]);
 			}
 		}
-		world.add(cq.mesh(new THREE.MeshBasicMaterial({ map: consoles.tex, color: new THREE.Color(0.95, 0.95, 0.95) })));
+		world.add(cq.mesh(new THREE.MeshBasicMaterial({ map: consoles.tex, color: new THREE.Color(0.9, 0.9, 0.9) })));
 		const consoleAt = put(new THREE.Object3D(), world, 0, FL + 1, CONS.z);
 		kit.live(consoles, consoleAt, 1 / 4, 14, 6);
 		// Chairs at the desks, facing the screen
@@ -1092,8 +1102,8 @@ export function observatoryBay(content: ObservatoryContent) {
 		deskSpots.forEach((d, i) => chairs.setMatrixAt(i, m4.compose(V(d.x - Math.sin(d.r) * 0.95, FL, d.z - Math.cos(d.r) * 0.95), q.setFromAxisAngle(UP, d.r), one)));
 		world.add(chairs);
 
-		// ---------- The far bulkhead: the main screen, telemetry and the target list either side, all facing the tunnel ----------
-		const far = add(new THREE.ShapeGeometry(new THREE.Shape().absarc(0, 0, RH, 0, Math.PI * 2, false), 96), bulkMat, 0, 0, Z1);
+		// ---------- The far bulkhead: the main screen, telemetry and the target list either side, all facing the entrance ----------
+		const far = add(new THREE.ShapeGeometry(new THREE.Shape().absarc(0, 0, RH, 0, Math.PI * 2, false), 96), std({ color: '#2b2e33', roughness: 0.85, metalness: 0.15 }), 0, 0, Z1);
 		far.rotation.y = Math.PI;
 		// The story, one page at a time. Each page is drawn once onto its own texture and the screen shows one of them;
 		// turning the page is a swap, not a redraw. The screen's own canvas holds a copy of the open page for reading
@@ -1113,18 +1123,18 @@ export function observatoryBay(content: ObservatoryContent) {
 		world.add(screen);
 		// Every page is drawn on a speck hidden in the frame, so all of them are on the graphics card before the first turn
 		for (const t of pages) add(new THREE.PlaneGeometry(0.01, 0.01), new THREE.MeshBasicMaterial({ map: t }), 0, SCREEN.y, Z1 - 0.12).rotation.y = Math.PI;
-		put(rbox(SCREEN.w + 0.7, SCREEN.h + 0.7, 0.3, darkSteel, 0.08), world, 0, SCREEN.y, Z1 - 0.18);
-		for (const [w, h, x, y] of [[SCREEN.w + 0.3, 0.05, 0, SCREEN.h / 2 + 0.16], [SCREEN.w + 0.3, 0.05, 0, -SCREEN.h / 2 - 0.16], [0.05, SCREEN.h + 0.3, SCREEN.w / 2 + 0.16, 0], [0.05, SCREEN.h + 0.3, -SCREEN.w / 2 - 0.16, 0]] as const) {
-			box(w, h, 0.04, violet, x, SCREEN.y + y, SCREEN.z - 0.02);
+		put(rbox(SCREEN.w + 0.6, SCREEN.h + 0.6, 0.3, bezel, 0.06), world, 0, SCREEN.y, Z1 - 0.18);
+		for (const [w, h, x, y] of [[SCREEN.w + 0.6, 0.05, 0, SCREEN.h / 2 + 0.3], [SCREEN.w + 0.6, 0.05, 0, -SCREEN.h / 2 - 0.3], [0.05, SCREEN.h + 0.6, SCREEN.w / 2 + 0.3, 0], [0.05, SCREEN.h + 0.6, -SCREEN.w / 2 - 0.3, 0]] as const) {
+			box(w, h, 0.05, alu, x, SCREEN.y + y, SCREEN.z + 0.03);
 		}
-		// The bright line that sweeps down the glass as a page turns
+		// A soft line that passes down the glass as a page turns
 		const sweepMat = new THREE.ShaderMaterial({
 			uniforms: { uT: { value: 1 } },
 			vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
 			fragmentShader: /* glsl */ `uniform float uT; varying vec2 vUv;
 				void main() { float edge = 1.0 - uT * 1.1; float line = exp(-abs(vUv.y - edge) * 140.0);
 				float wake = smoothstep(edge, edge + 0.18, vUv.y) * (1.0 - smoothstep(edge + 0.18, edge + 0.4, vUv.y));
-				vec3 c = vec3(0.55, 0.75, 1.0) * (line * 1.3 + wake * 0.08) * (1.0 - smoothstep(0.85, 1.0, uT));
+				vec3 c = vec3(0.85, 0.88, 0.92) * (line * 0.7 + wake * 0.05) * (1.0 - smoothstep(0.85, 1.0, uT));
 				gl_FragColor = vec4(c, 1.0); }`,
 			transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
 		});
@@ -1135,12 +1145,12 @@ export function observatoryBay(content: ObservatoryContent) {
 		world.add(sweep);
 		let sweepT = 1;
 		const strip = pageStrip(content.panels);
-		const stripMesh = new THREE.Mesh(new THREE.PlaneGeometry(9, 9 * (112 / 2048)), new THREE.MeshBasicMaterial({ map: strip.tex, color: new THREE.Color(0.95, 0.95, 0.95) }));
+		const stripMesh = new THREE.Mesh(new THREE.PlaneGeometry(9, 9 * (112 / 2048)), new THREE.MeshBasicMaterial({ map: strip.tex, color: new THREE.Color(0.9, 0.9, 0.9) }));
 		stripMesh.position.set(0, SCREEN.y - SCREEN.h / 2 - 0.5, Z1 - 0.1);
 		stripMesh.rotation.y = Math.PI;
 		stripMesh.userData.keep = true;
 		world.add(stripMesh);
-		put(rbox(9.3, 0.7, 0.12, darkSteel, 0.03), world, 0, SCREEN.y - SCREEN.h / 2 - 0.5, Z1 - 0.02);
+		put(rbox(9.3, 0.7, 0.12, bezel, 0.03), world, 0, SCREEN.y - SCREEN.h / 2 - 0.5, Z1 - 0.02);
 		function turn() {
 			page = (page + 1) % pages.length;
 			screenMat.uniforms.uMap.value = pages[page];
@@ -1155,41 +1165,48 @@ export function observatoryBay(content: ObservatoryContent) {
 			const g = new THREE.Group();
 			g.position.set(e * SIDE.x, FL + 5.5, SIDE.z);
 			g.rotation.y = Math.atan2(-e * 0.6, -0.8);
-			put(rbox(2.1, 7.3, 0.2, darkSteel, 0.05), g, 0, 0, -0.1);
+			put(rbox(2.0, 7.12, 0.14, bezel, 0.04), g, 0, 0, -0.08);
 			put(face(l.tex, 1.8, 6.92, true), g, 0, 0, 0.004);
-			for (const s of [-1, 1]) put(new THREE.Mesh(new THREE.BoxGeometry(0.025, 6.9, 0.025), violet), g, s * 1.0, 0, 0.02);
-			put(new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.9, 0.3), darkSteel), g, 0, -4.6, -0.1);
+			put(new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.9, 0.3), darkSteel), g, 0, -4.5, -0.1);
 			put(new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 0.8), steel), g, 0, -5.47, -0.1);
 			world.add(g);
 			kit.live(l, g, 1 / 6, 45, 3.6);
 		}
-		// A skirting along the foot of the bulkhead, lit along its top
 		box(20, 0.45, 0.4, darkSteel, 0, FL + 0.225, Z1 - 0.2);
-		box(19.6, 0.03, 0.03, red, 0, FL + 0.46, Z1 - 0.4);
 
-		// ---------- Lights: dim and cool, the screen the brightest thing in the room ----------
-		world.add(new THREE.HemisphereLight('#7f93c9', '#120d0a', 0.32));
-		const screenLight = new THREE.PointLight('#a8c4ff', 70, 34, 2);
+		// ---------- Lights: low and neutral, as in a dome between observations; the screen the brightest thing ----------
+		world.add(new THREE.HemisphereLight('#c9d2e0', '#2b2724', 0.08));
+		// Two pendant lamps hung from the crown
+		for (const z of [-6, 8]) {
+			const x = -2.6, top = Math.sqrt(RH * RH - x * x) - 0.15, y = FL + 13;
+			rod(V(x, y + 0.3, z), V(x, top, z), 0.015, steel);
+			add(new THREE.CylinderGeometry(0.22, 0.6, 0.4, 32, 1, true), std({ color: '#3a3f45', roughness: 0.5, metalness: 0.6, side: THREE.DoubleSide }), x, y + 0.1, z);
+			add(new THREE.CircleGeometry(0.56, 32).rotateX(Math.PI / 2), lamp, x, y - 0.08, z);
+			const l = new THREE.PointLight('#fff0dc', 7, 30, 2);
+			l.position.set(x, y - 0.4, z);
+			world.add(l);
+		}
+		const screenLight = new THREE.PointLight('#dbe5ff', 30, 30, 2);
 		screenLight.position.set(0, SCREEN.y - 1, Z1 - 3.5);
 		world.add(screenLight);
-		const tunnelLight = new THREE.PointLight('#ff3b2f', 5, 9, 2);
+		const tunnelLight = new THREE.PointLight('#ffeedd', 2, 10, 2);
 		tunnelLight.position.set(0, FL + 3.2, -16);
 		world.add(tunnelLight);
-		const mouthLight = new THREE.PointLight('#9a8cff', 6, 10, 2);
-		mouthLight.position.set(0, FL + 4.5, TUN.z1 + 1.5);
-		world.add(mouthLight);
 
 		function update(dt: number, time: number) {
 			const p = pointing(time);
 			scope.mount.rotation.y = p.az;
 			scope.tube.rotation.z = p.alt;
-			twinkle.value = time;
+			// The planets turn on their arms, each at its own pace
 			planets.forEach((pl, i) => {
-				const a = pl.off + time * pl.w, x = Math.cos(a) * pl.a, z = ORR.z + Math.sin(a) * pl.a;
-				orbs.setMatrixAt(i, m4.compose(V(x, FL + 0.31 + pl.r, z), q.identity(), V(pl.r, pl.r, pl.r)));
-				if (i === 5) ringed.position.set(x, FL + 0.31 + pl.r, z);
+				const a = pl.off + time * pl.w, x = Math.cos(a) * pl.a, z = ORR.z - Math.sin(a) * pl.a, top = pl.y + 0.06;
+				q.setFromAxisAngle(UP, a);
+				arms.setMatrixAt(i, m4.compose(V(0, pl.y, ORR.z), q, V(pl.a, 1, 1)));
+				posts.setMatrixAt(i, m4.compose(V(x, pl.y, z), q.identity(), V(1, top - pl.y, 1)));
+				orbs.setMatrixAt(i, m4.compose(V(x, top + pl.r, z), q, V(pl.r, pl.r, pl.r)));
+				if (i === 5) ringed.position.set(x, top + pl.r, z);
 			});
-			orbs.instanceMatrix.needsUpdate = true;
+			for (const im of [arms, posts, orbs]) im.instanceMatrix.needsUpdate = true;
 			if (sweepT < 1) {
 				sweepT = Math.min(1, sweepT + dt / 0.7);
 				sweepMat.uniforms.uT.value = sweepT;
@@ -1210,11 +1227,13 @@ export function observatoryBay(content: ObservatoryContent) {
 			hatch: { z: Z0, y: HATCH_Y, door, wheel },
 			revealAt: 40, // the main screen boots as soon as the pilot steps in
 			exposure: 1.0,
-			environment: 0.08,
+			environment: 0.05,
+			readFrom: 45, // the main screen can be opened from anywhere in the hall, the entrance included
 			actions: [{
 				x: 0, z: 3, reach: 17, look: V(0, SCREEN.y, SCREEN.z),
 				label: () => (page < pages.length - 1 ? 'turn to the next page' : 'go back to the first page'),
 				run: turn,
+				screen, // so the page also turns while the screen is open up close
 			}],
 			update,
 		};
@@ -1257,7 +1276,7 @@ function collide(p: THREE.Vector3, radius: number) {
 	p.z = THREE.MathUtils.clamp(p.z, Z0 + 0.3, Z1 - 0.9);
 	const lim = p.z < TUN.z1 ? TW - 0.4 : HW - 0.5;
 	p.x = THREE.MathUtils.clamp(p.x, -lim, lim);
-	for (const c of [{ x: TEL.x, z: TEL.z, r: TEL.pier + 0.1 }, { x: 0, z: ORR.z, r: ORR.r + 0.3 }]) {
+	for (const c of [{ x: TEL.x, z: TEL.z, r: TEL.pier + 0.1 }, { x: 0, z: ORR.z, r: ORR.rope + 0.15 }]) {
 		const dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz), r = c.r + radius;
 		if (d < r && d > 1e-4) { p.x = c.x + (dx / d) * r; p.z = c.z + (dz / d) * r; }
 	}
