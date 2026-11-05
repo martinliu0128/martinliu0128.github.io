@@ -299,10 +299,6 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 					sessionStorage.setItem('debrief-booted', '1');
 				}
 			} catch (e) {}
-			// A first-time visitor landing on the system gets the briefing on how to find their way around
-			try {
-				if (!localStorage.getItem('ml1-briefed') && !location.hash.slice(1)) document.documentElement.classList.add('briefing');
-			} catch (e) {}
 		</script>
 	</head>
 	<body>
@@ -1035,7 +1031,7 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 			// Let the first-visit boot finish, then drop its long delays so later openings use their own timing
 			if (root.classList.contains('boot')) setTimeout(() => root.classList.remove('boot'), 2800);
 
-			// ---------- The briefing: shown once on a first visit, and again from "How to explore" ----------
+			// ---------- The briefing: shown each time the site loads, and again from "How to explore" ----------
 			// Its gauge runs while the system plots behind it; once it is full, Begin (or Enter, or Escape) closes it.
 			const brief = document.querySelector<HTMLElement>('.brief')!;
 			const briefGo = brief.querySelector<HTMLButtonElement>('.brief-go')!;
@@ -1057,7 +1053,6 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 			}
 			function closeBrief() {
 				if (!root.classList.contains('briefing') || briefGo.disabled) return;
-				try { localStorage.setItem('ml1-briefed', '1'); } catch { /* private mode: it shows again next time */ }
 				if (reduced) { root.classList.remove('briefing'); return; }
 				root.classList.add('brief-out');
 				setTimeout(() => root.classList.remove('briefing', 'brief-out'), 450);
@@ -1069,7 +1064,8 @@ const tabs = navTabs.map((t) => ({ href: 'href' in t ? t.href : t.hash, label: t
 				if (!root.classList.contains('briefing')) return;
 				if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); closeBrief(); }
 			}, true);
-			if (root.classList.contains('briefing')) openBrief(true);
+			// Except when the link goes straight inside a module, where the pilot means to walk, not read
+			if (!(location.hash.slice(1) in INTERIORS)) openBrief(true);
 
 			// ---------- Clock and tab state ----------
 			const clock = document.querySelector('.clock')!;
